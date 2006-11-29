@@ -5,12 +5,12 @@ try:
     eyed3 = True
 except:
     eyed3 = False
-    
+
 import sys
 import string
 from time import strftime,localtime
 if not sys.platform.startswith("win"):
-	from popen2 import Popen3
+    from popen2 import Popen3
 
 class id3Comment:
     def __init__(self,filename,taglist = ["Artist","Title","Genre","Album"]):
@@ -67,7 +67,7 @@ class vorbisComment:
     def write(self,tagdict):
         cmd = "-w %s " % self.filename
         for item in tagdict.keys():
-            cmd = cmd + '-t "%s=%s" ' % (string.capitalize(item),tagdict[item])  
+            cmd = cmd + '-t "%s=%s" ' % (string.capitalize(item),tagdict[item])
         self.callVorbisComment(cmd)
     def read(self):
         cmd = "-l %s" % self.filename
@@ -116,7 +116,7 @@ class Comment:
             except Exception,e:
                 print "id3-read",e
                 pass
-                
+
         if self.fileformat == "vorbis" and self.vorbis:
             try:
                 self.comment = vorbisComment(self.filename)
@@ -125,14 +125,14 @@ class Comment:
             except Exception,e:
                 print "vorbis-read",e
                 pass
-                
+
         return dict
     def write(self,dict):
         try:
             self.comment.write(dict)
         except Exception,e:
             pass
-                
+
 
 def editTags(feed,entry,options,filename,taglist=["Artist","Title","Genre","Album"]):
     tagdict = {}
@@ -145,7 +145,7 @@ def editTags(feed,entry,options,filename,taglist=["Artist","Title","Genre","Albu
         comment = Comment(filename,eyed3,vorbis)
     except IOError:
         return
-        
+
     tagdict = comment.read()
 
     #set empty tag to defaults
@@ -158,7 +158,7 @@ def editTags(feed,entry,options,filename,taglist=["Artist","Title","Genre","Albu
         tagdict["Genre"] = "Podcast"
     if not tagdict.has_key("Album") or not tagdict["Album"] or rewriteID3:
         tagdict["Album"] = feed["title"]
-   
+
     for tag in taglist:
         if options.has_key(tag):
             tagdict[tag] = str(options[tag])
