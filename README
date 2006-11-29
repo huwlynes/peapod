@@ -1,0 +1,29 @@
+Peapod is currently designed to be run from the command-line - ie, it doesn't have a GUI. Once you have downloaded & extracted peapod simpy type :
+
+/path/to/peapod.py
+
+This will create a default configuration file for you in your home directory in :
+
+~/.peapod/peapod.xml
+
+You can edit this file in a text-editor to set the defaults for the program. You can also over-ride the defaults by using command-line arguments which you can read by typing :
+
+/path/to/peapod.py --help
+
+To add a feed using the commandline simply type :
+
+/path/to/peapod.py --addnew=http://www.somewhere.com/feed.xml
+
+To fetch any updated feeds in your list just run :
+
+/path/to/peapod.py
+
+To copy all the feeds you've downloaded recently to your MP3 player you can run :
+
+/path/to/peapod.py --copynew
+
+Every subsequent run with --copynew will copy all of the podcasts that you've downloaded since the last time you ran copynew.
+
+To dump a playlist of downloaded files since the last time you ran playlist
+
+/path/to/peapod.py --playlist > /path/to/podcasts.m3u

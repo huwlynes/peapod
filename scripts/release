@@ -1,0 +1,28 @@
+#!/bin/bash
+#this script generates a release tarball
+
+subversion="svn://peapodpy.org/var/www/peapod"
+
+#grab a changelog
+svn log $subversion > /tmp/CHANGELOG
+
+revision=`svn info $subversion | grep Revision | awk '{print $2}'`
+release="0.$revision"
+echo $release
+
+sed 's/xxx/'$release'/' < setup.py > setup.py.version
+mv setup.py.version setup.py
+
+#copy docs from website
+website=http://www.peapodpy.org/
+mkdir docs
+links --dump ${website}about > docs/about.txt
+links --dump ${website}configuration > docs/configuration.txt
+links --dump ${website}dependencies > docs/dependencies.txt
+links --dump ${website}downloading-peapod > docs/getting.txt
+links --dump ${website}using-peapod > docs/using.txt
+
+python setup.py sdist
+mv dist/*.gz /tmp
+rm -rf build
+rm -rf dist
