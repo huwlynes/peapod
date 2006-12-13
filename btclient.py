@@ -11,7 +11,7 @@
 # License.
 
 # Written by Bram Cohen, Uoti Urpala and John Hoffman
-# modified to form btclient.py by Huw Lynes 
+# modified to form btclient.py by Huw Lynes
 
 
 from __future__ import division
@@ -31,7 +31,7 @@ try:
     __btversion__ = 4.2
 except:
     __btversion__ = 1.0
-    
+
 
 from BitTorrent.download import Feedback, Multitorrent
 from BitTorrent.defaultargs import get_defaults
@@ -93,18 +93,18 @@ class HeadlessDisplayer(object):
         self.display({'activity':'download succeeded', 'fractionDone':1})
 
     def error(self, errormsg):
-    	noneerror = 0
+        noneerror = 0
         newerrmsg = strftime('[%H:%M:%S] ') + errormsg
         self.errors.append(newerrmsg)
         self.display({})
         self.errors = []
-        
-        
+
+
     def display(self, statistics):
         for err in self.errors:
             print 'ERROR:' + err + '\n'
 
- 
+
 
 
 class DL(Feedback):
@@ -197,12 +197,12 @@ class mytorrent:
         try:
             config, args = configfile.parse_configuration_and_args(defaults,
                                       uiname)
-        
+
             config["url"] = url
             config["save_in"] = save_in
             config["selfish"] = selfish
-            
-        
+
+
             if args:
                 if config['responsefile']:
                     raise BTFailure, 'must have responsefile as arg or ' \
@@ -224,10 +224,10 @@ class mytorrent:
         except BTFailure, e:
             print str(e)
             self.status = 1
-        
+
         if not self.status:
             self.config = config
-            self.metainfo = metainfo    
+            self.metainfo = metainfo
             try:
                 self.metadict = bdecode(metainfo)
                 self.filename = self.metadict["info"]["name"]
@@ -239,7 +239,7 @@ class mytorrent:
         else:
             self.config = None
             self.metainfo = None
-                
+
     def run(self):
         if self.status:
             return self.status
@@ -248,15 +248,15 @@ class mytorrent:
         return code
 
 if __name__ == "__main__":
-    
+
     selfish = 1
-    
+
     def quick_usage():
         print "btclient.py url save_dir [seed]"
         print "url \t\t url of torrent"
         print "save_dir \t path to save directory"
         print "seed \t\t set for btclient to continue seeding when finished"
-        
+
     if len(sys.argv) == 3:
         url = sys.argv[1]
         save_dir = sys.argv[2]
@@ -267,9 +267,9 @@ if __name__ == "__main__":
     else:
         quick_usage()
         sys.exit(1)
-        
+
     torrent = mytorrent(url,save_dir,selfish)
     print "Downloading:",torrent.filename
     ret = torrent.run()
     sys.exit(ret)
-        
+

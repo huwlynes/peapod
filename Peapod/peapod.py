@@ -7,8 +7,6 @@ Released under the GPL - see http://www.gnu.org for details.
 
 This script uses the excellent RSS/Atom feed parser from http://feedparser.org and the
 "openanything" module from the equally excellent "Dive into Python" http://diveintopython.org/ .
-
-
 """
 
 __version__ = "pre1.0"
@@ -62,8 +60,11 @@ class PeapodError( Exception ):
     def __str__( self ):
         return repr( self.value )
 
-#export feeds to OPML on stdout, reads in feedlist from PeapodConf
+
 def exportfeeds( feedlist ):
+    """
+    Export feeds to OPML on stdout.
+    """
     opml = OPML.OPML()
     outlines = OPML.OutlineList()
     for key in feedlist.keys():
@@ -76,9 +77,10 @@ def exportfeeds( feedlist ):
     opml.outlines = outlines.roots()
     opml.output()
 
+
 class importfeeds:
     """
-    class to import RSS feeds from files, urls, RSS and OPML
+    Class to import feeds from RSS and OPML sources.
     """
     def __init__( self, feed, peapod, title=None ):
         self.feed = feed
@@ -86,11 +88,12 @@ class importfeeds:
         self.peapod = peapod
         self.feedlist = []
 
+
     def get( self ):
         """
-        convert feed source (be it opml, RSS etc) into a list of dictionaries
-        containing titles and urls. This list of dictionaries can then be used to
-        generate a config file
+        Convert feed source (be it opml, RSS etc) into a list of dictionaries
+        containing titles and urls. This list of dictionaries can then be used
+        to regenerate the user config file.
         """
         #using urlgrabber so it doesn't matter whether feed is a file or a url
         fd = urlopen( self.feed )
@@ -119,9 +122,10 @@ class importfeeds:
                 sys.exit(-1)
         self.toXML()
 
+
     def toXML( self ):
         """
-        write out imported feeds XML config file
+        Write out imported feeds XML config file.
         """
         from xml.dom.ext import PrettyPrint
         #grab elements out of config object to form basis of xml config file
@@ -144,8 +148,20 @@ class importfeeds:
         except Exception,e:
             print e
 
+
 class downloadURL:
+    """
+    A class to download a single enclosure from a feed.  Redirect requests are
+    handled before the download request is made.
+
+    A limited number of filetypes are accepted for download, as defined by a
+    hardcoded list of file extensions.  In the case where a pattern match
+    fails, a subsequent match is tested based on a list of mime-types.
+
+    BitTorrent downloads are handled by an out-of-process application.
+    """
     blockSize = 4096
+
     def __init__( self, url, basedir, tmpdir='/tmp',filename=None, bittorrent=True, bandwidth=5000, user_agent=USER_AGENT, path=False, content_type=None ):
             self.url = url
             self.basedir = basedir
@@ -197,7 +213,11 @@ class downloadURL:
             if self.trackname:
                 self.savename = os.path.join( self.basedir, self.trackname )
 
+
     def callbittorrent( self, url, savedir, path ):
+        """
+        Spawn an external process to fetch an enclosure using BitTorrent.
+        """
         proc = Popen3( '%s/btclient.py %s %s' % ( path, url, savedir ), True )
         output = proc.fromchild.readlines()
         errors = proc.childerr.read()
@@ -207,8 +227,14 @@ class downloadURL:
         else:
             return 0
 
-    def get( self ):
 
+    def get( self ):
+        """
+        Fetch the requested enclosure to a temporary path.  If the file already
+        exists in the temporary location, a simple reget should pick up the
+        download where it previously left off.  Once the file has been
+        completely downloaded, it is moved into the proper location.
+        """
         if self.torrent:
             amp = re.compile( '(?P<amp>&)' )
             safe_url = amp.sub( r'\\\g<amp>', self.url )
@@ -256,7 +282,11 @@ class downloadURL:
 
 
 class podcastThreaded( Thread ):
-
+    """
+    Update a feed and parse it for new enclosures, using conditional download
+    information, if available.  Before downloading, each file is checked
+    against a list of known downloads to prevent duplicates.
+    """
     message = ""
     log = ""
     feedlog = ""
@@ -278,13 +308,19 @@ class podcastThreaded( Thread ):
         self.filelist = filelist
         Thread.__init__( self )
 
+
     def run( self ):
         message, log, feedlog = self.fetchFeed()
         self.message = message
         self.log = log
         self.feedlog = feedlog
 
+
     def makefeedlogentry( self, feed ):
+        """
+        Generate a string to be appended to the feed log for updating
+        conditional download information.
+        """
         if feed == None:
             self.feedlog = "%s||None||None\n" % ( self.url )
         else:
@@ -298,7 +334,11 @@ class podcastThreaded( Thread ):
                 feed_modified = None
             self.feedlog = self.feedlog + "%s||%s||%s\n" % ( self.url, feed_etag, feed_modified )
 
-    def getcontenturl( self, entry):
+
+    def getcontenturl( self, entry ):
+        """
+        Extract enclosure URLs and Content-Type information from feed entry.
+        """
         content_type = None
         mp3URL = None
         if entry.has_key("enclosures"):
@@ -318,12 +358,18 @@ class podcastThreaded( Thread ):
             mp3URL = None
         return mp3URL,content_type
 
+
     def dowehaveit( self, entry ):
+        """
+        Check new entry against list of known feed entries and report
+        duplicates.
+        """
         if entry.has_key( "id" ):
             if entry["id"] in self.guidlist:
                 return 1
             else:
                 return None
+
 
 #    def feednewcontent( self ):
 #    #don't check last-modified or etag on these conditions
@@ -337,7 +383,11 @@ class podcastThreaded( Thread ):
 
 
     def fetchFeed( self ):
-
+        """
+        Fetch feed from host and parse it for enclosures, performing
+        conditional downloading if appropriate.  If enclosures are found,
+        creates an instance of downloadURL to retrieve the files.
+        """
         global threadcount
         numgrabbed = 0
         #don't do conditional download if we are trying to catchup or any of the getall options match
@@ -499,7 +549,6 @@ class podcastThreaded( Thread ):
                 print self.title, "no enclosures"
                 continue
 
-
             #quick check against guid first before bothering to head back to the webserver
             if self.dowehaveit( entry ):
                 self.maxfetch = self.maxfetch -1
@@ -545,7 +594,6 @@ class podcastThreaded( Thread ):
                         continue
                 else:
                     continue
-
 
             if self.options["verbose"]:
                 print "\tDownloading " + self.title + " -- " + mp3URL
@@ -597,9 +645,12 @@ class podcastThreaded( Thread ):
         return self.message, self.log, self.feedlog
 
 
-
 class podcastListXML:
-
+    """
+    Manages the spawning of threads to fetch each feed in the list of known
+    feeds.  After the threads have all been started, handles writing results to
+    the appropriate log files.
+    """
     filename = ""
     tlist = []
     message = ""
@@ -613,8 +664,11 @@ class podcastListXML:
         self.max_threads = self.config.defaults["max_threads"]
         self.feedLogDict = feedLogDict
 
+
     def downloadList( self ):
-        # loop over the feed URL's and fetch each one
+        """
+        Loop over the URLs in the feed list and fetch each one.
+        """
         for feed_title in self.config.feedlist:
             global threadcount
             feed = self.config.feedlist[feed_title]
@@ -664,11 +718,14 @@ class podcastListXML:
                 feedlog.close()
 
 
-
 class peapodConf:
     """
-    Class to parse the ~/.peapod/peapod.xml file.
-    It will create a default one if it's missing.
+    Class to manage the configuration for peapod.  Handles command-line
+    arguments, configuration file options and hardcoded defaults.  Options may
+    be global or specific to a known feed.
+
+    The configuration file is stored as an xml file.  If one is not present, a
+    default can be created.
 
     Use :
 
@@ -711,14 +768,25 @@ class peapodConf:
                 "rewriteID3": 0
                }
 
+
     def get_text( self, nodelist ):
+        """
+        Extract text from the xml tags read in.  Data type is not known at this
+        point.
+        """
         rc = ""
         for node in nodelist:
             if node.nodeType == node.TEXT_NODE:
                 rc = rc + node.data
         return rc
 
+
     def process_options( self, element, opt ):
+        """
+        Extract value from an option element.  Data type is assumed from the
+        string content.  Extracted values are inserted into opt as dictionary
+        elements.
+        """
         for item in element.childNodes:
             if item.nodeType == Node.ELEMENT_NODE:
                 tag = item.nodeName
@@ -732,6 +800,7 @@ class peapodConf:
                     value = 0
                 opt[tag] = value
         return opt
+
 
     def __init__( self ):
         if not self.parsed:
@@ -771,8 +840,12 @@ class peapodConf:
         self.defaults["savedir"] = os.path.expanduser( self.defaults["savedir"] )
         self.config = config
 
+
     def parse_commandline( self):
-        # check for commandline argument - we do this second so commandline > peapod.conf
+        """
+        Check for commandline arguments.  Uses getopt for argument processing
+        long and short style options.
+        """
         try:
             opts, args = getopt.getopt( sys.argv[1:], "hbcdvpm:ag:f", ["help", "savestyle=", "post=", "copynew","synciPod", "playlist", "dryrun", "catchup", "mp3path=", "ipodpath=","addnew=", "getall=", "bandwidth=", "forgetnew", "verbose", "getallglobal", "export", "title="] )
         except getopt.GetoptError,e:
@@ -824,7 +897,12 @@ class peapodConf:
                 else:
                     sys.exit(0)
 
+
     def create_default_config( self ):
+        """
+        Creates a default configuration file in ~/.peapod/peapod.xml, which
+        provides a sample podcast subscription.
+        """
         config = """<?xml version='1.0' encoding='UTF-8'?>
 <peapod>
     <options>
@@ -848,6 +926,11 @@ class peapodConf:
 
 
 class newTracks:
+    """
+    A class to manage actions based on recent changes to the peapod databases.
+    Generation of playlists and copying of new files to a device are currently
+    included.
+    """
 
     list = []
     lasttime = 0
@@ -865,9 +948,12 @@ class newTracks:
         else:
             self.lasttime = 0
 
-    def copyNew( self, path ):
 
-        # open the download log and check for any files which have been downloaded since the last run
+    def copyNew( self, path ):
+        """
+        Examine the download log for any files which have been downloaded since
+        the last run.  Copies files to configured mountpoint for media device.
+        """
         if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
             log = open( os.path.expanduser( "~/.peapod/download.log" ), "r" )
             while 1:
@@ -887,7 +973,12 @@ class newTracks:
             log.close()
         self.updateLog()
 
+
     def synciPod( self, mountPoint ):
+        """
+        Examine the download log for any files which have been downloaded since
+        the last run.  Copies files to iPod.
+        """
         mountPoint=mountPoint.encode()
         try:
             itdb=gpod.itdb_parse(mountPoint,None)
@@ -918,7 +1009,11 @@ class newTracks:
             gpod.itdb_write(itdb, None)
             print "Updating iTunesDB..."
 
+
     def copyToiPod(self,itdb,filename):
+        """
+        Copy file to iPod via gpod library.
+        """
         track = gpod.itdb_track_new()
         pl=gpod.itdb_playlist_podcasts(itdb)
         audiofile = eyeD3.Mp3AudioFile(filename)
@@ -941,8 +1036,12 @@ class newTracks:
         if gpod.itdb_cp_track_to_ipod(track,filename, None)!= 1:
             raise Exception('Unable to copy %s to iPod' % filename)
 
+
     def playlistNew( self, path ):
-        # open the download log and check for any files which have been downloaded since the last run
+        """
+        Examine the download log for any files which have been downloaded since
+        the last run.  Print filenames to create a playlist.
+        """
         if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
             log = open( os.path.expanduser( "~/.peapod/download.log" ), "r" )
             while 1:
@@ -957,12 +1056,14 @@ class newTracks:
                     continue
                 if int( dtime ) > int( self.lasttime ):
                     print filename
-
             log.close()
         self.updateLog()
 
     def updateLog( self ):
-        # update the time of our run
+        """
+        Update the timestamp for marking new files.  Has the effect of marking
+        all downloaded files as old.
+        """
         lc = open( os.path.expanduser( "~/.peapod/%s" % self.logfile ), "w" )
         lc.write( "%s" % int( time.time() ) )
         lc.close()
@@ -970,15 +1071,18 @@ class newTracks:
 
 def cleanpath( path ):
     """
-    takes a path and expands any variables and ~ and returns an absolute path
+    Takes a path and expands any variables and ~ and returns an absolute path
     """
     path = os.path.expanduser( path )
     path = os.path.expandvars( path )
     path = os.path.abspath( path )
     return path
 
+
 def peapod_usage():
-    # quicky function to print some help
+    """
+    Display command line usage info to stdout.
+    """
     print "PeaPod - Usage"
     print "--help | -h\t\t\tThis message"
     print "--copynew | -c\t\t\tCopy recent downloads to your mp3 player"
@@ -998,9 +1102,13 @@ def peapod_usage():
     print "--post=command \t\t\t'command' is run against the filename of each new podcast"
     print "--export \t\t\tprints feeds in OPML"
 
+
 def feedLog():
-    #feed.log contains a list of feeds and e-tags or last-modified headers
-    #this information allows us to not keep downloading unchanged feeds
+    """
+    Parse feed.log and extract information about known feeds, and any
+    associated conditional download information (e-tag, modified timestamps).
+    Returns information as a dict, indexed by URL.
+    """
     feedLogDict = {}
     entryDict = {}
     if os.path.exists( os.path.expanduser( "~/.peapod/feed.log" ) ):
@@ -1017,7 +1125,14 @@ def feedLog():
         log.close()
     return feedLogDict
 
+
 def downloadListFull():
+    """
+    Parses old version of download.log to extract filenames of previously
+    downloaded files.  Returns a list.
+
+    I believe this is no longer used and can be purged.
+    """
     #like downloadList but returns full paths not filenames
     filenames = []
     if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
@@ -1032,7 +1147,10 @@ def downloadListFull():
 
 
 def upgradeDownloadLog( logfile ):
-    """this function is here to allow us to seamlessly upgrade to the new log format"""
+    """
+    Upgrade a comma-delimited download.log to new format, using '||' as a
+    delimiter.
+    """
     if not os.path.exists( logfile ):
         return
     downloadDict = {}
@@ -1073,6 +1191,12 @@ def upgradeDownloadLog( logfile ):
 
 
 def downloadList():
+    """
+    Parse download.log and extract information about previously downloaded
+    files.
+    Returns a dict, composed of two lists.
+
+    """
     # quicky function to grab the filenames from the download log
     filenames = []
     guids = []

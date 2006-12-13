@@ -13,6 +13,10 @@ if not sys.platform.startswith("win"):
     from popen2 import Popen3
 
 class id3Comment:
+    """
+    A class to manage simple reading and writing of id3 tags.
+    """
+
     def __init__(self,filename,taglist = ["Artist","Title","Genre","Album"]):
         self.filename = filename
         self.taglist = taglist
@@ -20,7 +24,13 @@ class id3Comment:
             pass
         else:
             raise IOError, "no ID3 support"
+
+
     def read(self):
+        """
+        Read id3 tags stored in mp3 file.  Tags are restricted to the subset
+        configured in the constructor.  Returns a dict.
+        """
         if eyeD3.isMp3File(str(self.filename)):
             self.tagobject = eyeD3.Tag()
             self.tagobject.link(str(self.filename))
@@ -36,7 +46,12 @@ class id3Comment:
             except:
                 print "id3 comments read",e
         return tagdict
+
+
     def write(self,tagdict):
+        """
+        Writes id3 tags to mp3 file.
+        """
         for tag in tagdict:
             cmd = "self.tagobject.set%s(%s)" % (str(tag),'tagdict["%s"]' % unicode(tag))
             try:
@@ -50,11 +65,21 @@ class id3Comment:
         except Exception,e:
             print "id3 write",e
 
+
 class vorbisComment:
+    """
+    A class to manage simple reading and writing of vorbis tags.
+    """
+
     def __init__(self,filename):
         self.filename = filename
         self.callVorbisComment()
+
+
     def callVorbisComment(self,cmd="--help"):
+        """
+        Spawns a process to vorbiscomment to handle read and write requests.
+        """
         proc = Popen3('vorbiscomment %s' % cmd,True)
         output = proc.fromchild.readlines()
         errors = proc.childerr.read()
@@ -64,12 +89,22 @@ class vorbisComment:
         if errors and not output:
             output.append(errors)
         return output
+
+
     def write(self,tagdict):
+        """
+        Writes a set of tags to a vorbis file.
+        """
         cmd = "-w %s " % self.filename
         for item in tagdict.keys():
             cmd = cmd + '-t "%s=%s" ' % (string.capitalize(item),tagdict[item])
         self.callVorbisComment(cmd)
+
+
     def read(self):
+        """
+        Read tags stored in a vorbis file.  Returns a dict.
+        """
         cmd = "-l %s" % self.filename
         output = self.callVorbisComment(cmd)
         tagdict = {}
@@ -82,6 +117,10 @@ class vorbisComment:
         return tagdict
 
 class Comment:
+    """
+    A class to abstract the data types away from the tagging process.
+    """
+
     def __init__(self,filename,eyed3,vorbis):
         self.filename = filename
         self.vorbis = vorbis
@@ -106,7 +145,12 @@ class Comment:
             except Exception, e:
                 print "ogg",e
                 raise IOError,"can't read tags: %s" % self.filename
+
+
     def read(self):
+        """
+        Read tags from either mp3 or vorbis file.
+        """
         dict = {}
         if self.fileformat == "mp3" and eyed3:
             try:
@@ -127,7 +171,12 @@ class Comment:
                 pass
 
         return dict
+
+
     def write(self,dict):
+        """
+        Write tags to either mp3 or vorbis file.
+        """
         try:
             self.comment.write(dict)
         except Exception,e:
@@ -135,6 +184,10 @@ class Comment:
 
 
 def editTags(feed,entry,options,filename,taglist=["Artist","Title","Genre","Album"]):
+    """
+    Writes new tags to filename.  Default values are used to replace empty
+    tags.
+    """
     tagdict = {}
     try:
         vorbisComment("stuff")
