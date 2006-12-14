@@ -42,6 +42,7 @@ from time import strftime,localtime
 import urllib
 import urllib2
 import urlparse
+import logging
 if sys.platform.startswith("win"):
     bittorrent = False
 else:
@@ -51,6 +52,9 @@ try:
     from Peapod.btclient import mytorrent
 except:
     pass
+
+# get a copy of the root logger
+logger = logging.getLogger()
 
 #we use this error to signal no change to
 #etag or modified when downloading
@@ -65,16 +69,19 @@ def exportfeeds( feedlist ):
     """
     Export feeds to OPML on stdout.
     """
+    logger.debug("Exporting feeds")
     opml = OPML.OPML()
     outlines = OPML.OutlineList()
     for key in feedlist.keys():
         feed = feedlist[key]
         o = OPML.Outline()
         o.update({"title":feed["title"],"type":"rss","xmlUrl":feed["url"]})
+        logger.debug("* %s %s %s" % (feed["title"], "rss", feed["url"]))
         outlines.add_outline(o)
         outlines.close_outline()
     opml["title"] = "Feeds Exported From Peapod"
     opml.outlines = outlines.roots()
+    logger.debug("Writing opml file to stdout")
     opml.output()
 
 
@@ -96,16 +103,19 @@ class importfeeds:
         to regenerate the user config file.
         """
         #using urlgrabber so it doesn't matter whether feed is a file or a url
+        logger.debug("Opening feed: " + self.feed)
         fd = urlopen( self.feed )
         feed = {}
         #is this an OPML file?
         try:
             outlines = OPML.parse( fd ).outlines
+            logger.debug("Feed is OPML")
             for opmlfeed in outlines:
                 feed = {}
                 feed["title"] = opmlfeed["title"]
                 feed["url"] = opmlfeed["xmlUrl"]
                 self.feedlist.append( feed )
+                logger.debug("Feed has been imported: %s - %s" % (feed["title"], feed["url"]))
         except Exception, e:
             feed = {}
             try:
@@ -116,7 +126,7 @@ class importfeeds:
                     feed["title"] = outlines.title
                 feed["url"] = self.feed
                 self.feedlist.append(feed)
-
+                logger.debug("Feed has been imported: %s - %s" % (feed["title"], feed["url"]))
             except Exception, e:
                 print "Feedparser exception:", e
                 sys.exit(-1)
@@ -143,6 +153,7 @@ class importfeeds:
             p.appendChild( feed )
         try:
             fd = open( os.path.expanduser( "~/.peapod/peapod.xml" ), "w" )
+            logger.debug("Writing feedlist to " + fd.name)
             PrettyPrint( p, fd )
             fd.close()
         except Exception,e:
@@ -177,6 +188,7 @@ class downloadURL:
                 #use urllib2 to handle redirects before we hand the url off to openanything
                 request = urllib2.Request( url, headers={'User-agent':user_agent} )
                 opener = urllib2.build_opener()
+                logger.debug("Opening connection to: " + url)
                 f = opener.open( request )
                 #urlgrabber expects unquoted urls
                 self.url = urllib.unquote( f.geturl() )
@@ -187,13 +199,14 @@ class downloadURL:
             if ( not re.search( "\.torrent", self.url ) ) or ( not bittorrent ):
                 self.torrent = False
             else:
-               self.torrent = True
+                self.torrent = True
 
             if self.content_type == "application/x-bittorrent" and bittorrent:
-               self.torrent = True
+                self.torrent = True
             # get the actual track name
             # chop off any extraneous guff at the end of the URL (ie, blah.mp3?type=podcast)
             self.trackname = urlparse.urlparse( self.url )[2]
+            logger.debug("Found trackname: " + self.trackname)
 
             # also check for not having an mp3/ogg at all (ie, blah.com/sendfeed.php?id=43)
             if not re.search( "\.(mp3|ogg|mov|wav|m4v|mp4|m4a|aac|wmv)", self.trackname ):
@@ -205,6 +218,7 @@ class downloadURL:
                 self.trackname = os.path.split( self.trackname )[1]
 
             if self.torrent:
+                logger.debug("Using bittorrent to download file")
                 self.track = mytorrent( self.url, self.basedir )
                 self.trackname = self.track.filename
                 if self.track.status:
@@ -212,12 +226,14 @@ class downloadURL:
 
             if self.trackname:
                 self.savename = os.path.join( self.basedir, self.trackname )
+                logger.debug("Saving podcast as " + self.savename)
 
 
     def callbittorrent( self, url, savedir, path ):
         """
         Spawn an external process to fetch an enclosure using BitTorrent.
         """
+        logger.debug("Opening connection to btclient.py")
         proc = Popen3( '%s/btclient.py %s %s' % ( path, url, savedir ), True )
         output = proc.fromchild.readlines()
         errors = proc.childerr.read()
@@ -246,28 +262,33 @@ class downloadURL:
                 #allows us to recommence download after a problem
                 self.tmpdir = os.path.join(self.tmpdir,".peapod")
                 self.tmppath = os.path.join(self.tmpdir,self.trackname)
-                print self.tmppath
-                print self.tmpdir
                 if not os.path.isdir(self.tmpdir):
+                    logger.debug("Creating directory for temporary file: " + self.tmpdir)
                     os.makedirs(self.tmpdir)
                 if not os.path.isfile(self.tmppath):
+                    logger.debug("Creating temporary file: " + self.tmppath)
                     fd = open(self.tmppath,'w')
                     fd.close()
             except Exception, e:
-                print e
-                raise IOError, "Could not save the track : %s" % self.savename
+                logger.warn("Could not save the track : %s" % self.savename)
+                raise IOError
 
 
             # keep reading from the remote file and saving to disk till we'
             filename = self.tmppath
             try:
+                logger.debug("Fetching url")
                 grabber = URLGrabber( user_agent=self.user_agent, bandwidth=self.bandwidth )
                 grabber.urlgrab( str( self.url ), filename=str(filename), reget='simple' )
+                logger.debug( self.url )
+                logger.debug( filename )
             except Exception, e:
                 e = "%s:%s" % ( self.url, e )
+                logger.warn("%s:%s" % ( self.url, e ))
                 raise IOError, e
 
             try:
+                logger.debug("moving file to " + self.savename)
                 shutil.move( self.tmppath, self.savename )
                 #hack to get file permissions back to system defaults
                 #since mkstmp uses paranoid permissions
@@ -276,9 +297,9 @@ class downloadURL:
                 mode = (0666 & (0666 ^ current_umask))
                 os.chmod(self.savename, mode)
             except Exception, e:
-                print e
+                logger.warn("Could not create the file %s" % self.savename)
                 os.remove( self.tmppath )
-                raise IOError, "Could not create the file %s" % self.savename
+                raise IOError
 
 
 class podcastThreaded( Thread ):
@@ -321,6 +342,7 @@ class podcastThreaded( Thread ):
         Generate a string to be appended to the feed log for updating
         conditional download information.
         """
+        logger.debug("Writing entry to feed log")
         if feed == None:
             self.feedlog = "%s||None||None\n" % ( self.url )
         else:
@@ -343,16 +365,20 @@ class podcastThreaded( Thread ):
         mp3URL = None
         if entry.has_key("enclosures"):
             mp3URL = entry.enclosures[0]['url']
+            logger.debug("Found enclosure: " + entry.enclosures[0]["url"])
             if entry.enclosures[0].has_key( "type" ):
                 content_type = entry.enclosures[0]['type']
+                logger.debug("Content-type: " + entry.enclosures[0]["type"])
             else:
                 content_type = None
         elif entry.has_key("links"):
             for link in entry.links:
                 if link.has_key("rel") and link["rel"] == "enclosure":
+                    logger.debug("Found enclosure: " + link["href"])
                     mp3URL = link["href"]
                     if link.has_key("type"):
                         content_type = link["type"]
+                        logger.debug("Content-type: " + link["type"])
                     break
         if mp3URL == '':
             mp3URL = None
@@ -392,6 +418,8 @@ class podcastThreaded( Thread ):
         numgrabbed = 0
         #don't do conditional download if we are trying to catchup or any of the getall options match
         if self.options["catchup"] or re.compile( self.title, re.I ).match( self.options["getall"] ) or self.options["getallglobal"]:
+            logger.debug("Ignoring any conditional download")
+            logger.debug("Attempting to parse feed")
             feed = feedparser.parse( self.url, agent=USER_AGENT )
         else:
             #if not catchup use last-modified or ETag to see if feed has changed since last download
@@ -407,24 +435,24 @@ class podcastThreaded( Thread ):
                             raise PeapodError, "last-modified"
                     else:
                         try:
+                            logger.debug("Attempting to parse feed")
                             feed = feedparser.parse( self.url, agent=USER_AGENT )
                         except Exception,e:
-                            print e
+                            logger.warn("Unable to parse feed: " + self.url)
                             threadcount = threadcount -1
                 else:
+                    logger.debug("Attempting to parse feed")
                     feed = feedparser.parse( self.url, agent=USER_AGENT )
             except PeapodError, e:
-                if self.options["verbose"]:
-                    print str( e.value ) + " unchanged, not fetching: " + str( self.url )
+                logger.info( str( e.value ) + " unchanged, not fetching: " + str( self.url ))
                 threadcount = threadcount - 1
                 #we can't just use makefeedlogentry here because we haven't actually downloaded the feed
                 self.feedlog = self.feedlog + "%s||%s||%s\n" % ( self.url, self.feedLogDict[self.url]["e-tag"], self.feedLogDict[self.url]["modified"] )
                 return self.message, self.log, self.feedlog
             except AttributeError, e:
-                if self.options["verbose"]:
-                    print "%s: %s : problem getting url" % ( self.url, e )
-                    if feed.has_key( "headers" ):
-                        print feed.headers
+                logger.info("%s: %s : problem getting url" % ( self.url, e ))
+                if feed.has_key( "headers" ):
+                    logger.info( feed.headers )
                 threadcount = threadcount - 1
                 return self.message, self.log, self.feedlog
 #            except:
@@ -439,6 +467,7 @@ class podcastThreaded( Thread ):
         if not self.title:
             # if the feed has no title then just bail out as it's probably gibberish
             if not feed.feed.has_key( 'title' ):
+                logger.info("Ignoring feed - no title " + self.url)
                 return self.message, self.log, self.feedlog
 
             self.title = feed['feed']['title']
@@ -447,8 +476,7 @@ class podcastThreaded( Thread ):
         self.title = re.sub( "\W\W*", "_", self.title )
         self.options["getall"] = re.sub( "\W\W*", "_", self.options["getall"] )
 
-        if self.options["verbose"]:
-            print "Fetching podcasts from " + self.title
+        logger.info("Fetching podcasts from " + self.title)
 
         # set the base directory of the feed to the global "savedir" + the sanitised feed title
         if self.options["savestyle"] == "feed":
@@ -463,6 +491,7 @@ class podcastThreaded( Thread ):
 
         # if we've never seen this feed before, then make a directory for it
         if not os.path.exists( basedir ):
+            logger.debug("Creating directory for feed: " + basedir)
             os.makedirs( basedir )
 
             # this is the first time we've seen the feed - if we've been told only to download
@@ -474,8 +503,7 @@ class podcastThreaded( Thread ):
         if re.compile( self.title, re.I ).match( self.options["getall"] ) or self.options["getallglobal"]:
             self.maxfetch = 1000000
             getall = 1
-            if self.options["verbose"]:
-                print "Fetching all podcasts for %s" % self.title
+            logger.info("Fetching all podcasts for %s" % self.title)
         else:
             getall = 0
 
@@ -485,7 +513,7 @@ class podcastThreaded( Thread ):
         #make feed_count 3 months in the future so that we can deal with feeds that have a couple of
         #dodgy pubDates
         feed_count = int( time.mktime( time.localtime() ) ) + 7776000
-        #before we get to downloading the podcasts it's a ggod idea to order the feed by published date
+        #before we get to downloading the podcasts it's a good idea to order the feed by published date
         for entry in feed.entries:
             mp3URL,content_type = self.getcontenturl(entry)
             if mp3URL:
@@ -510,8 +538,7 @@ class podcastThreaded( Thread ):
                             time_epoch = feed_count
                             feed_count = feed_count - 1
                 else:
-                    if self.options["verbose"]:
-                        print self.title + " : no pubDate"
+                    logger.info("No pubDate information for " + self.title)
                     #podcasts which don't use pubDate use a fake time. These feeds end up getting
                     #read from top to bottom like they would if we were not ordering by time
                     try:
@@ -546,7 +573,7 @@ class podcastThreaded( Thread ):
             mp3URL,content_type = self.getcontenturl(entry)
             if not mp3URL:
                 #no enclosures so move on to next
-                print self.title, "no enclosures"
+                logger.info("No enlosures found.")
                 continue
 
             #quick check against guid first before bothering to head back to the webserver
@@ -564,16 +591,14 @@ class podcastThreaded( Thread ):
                 try:
                     grabber = downloadURL( mp3URL, basedir, tmpdir, bittorrent=self.options["bittorrent"], bandwidth=self.bandwidth, path=self.options["path"], content_type=content_type )
                 except Exception, e:
-                    if self.options["verbose"]:
-                        print e
-                        self.makefeedlogentry( None )
+                    logger.info("Unable to download enclosure: " + mp3URL)
+                    self.makefeedlogentry( None )
                     continue
 
             if not grabber.trackname:
                 #no filename indicates something went wrong so move on
-                if self.options["verbose"]:
-                    print "Not downloading %s" % mp3URL
-                    self.makefeedlogentry( None )
+                logger.info("Not downloading " + mp3URL)
+                self.makefeedlogentry( None )
                 continue
             else:
                 trackname = grabber.trackname
@@ -586,6 +611,7 @@ class podcastThreaded( Thread ):
                 # we have - so decrease the counter and check to see if we're done
                 #check that the time on this podcast isn't in the future. If it is it's probably
                 #a bad time. don't decrease maxfetch so that a bad pubdate doesn't clog up the feed
+                logger.debug("Already have file.  Skipping download")
                 if not int( time_epoch ) > int( time.mktime( time.localtime() ) ):
                     self.maxfetch = self.maxfetch -1
                     if self.maxfetch <= 0:
@@ -595,11 +621,10 @@ class podcastThreaded( Thread ):
                 else:
                     continue
 
-            if self.options["verbose"]:
-                print "\tDownloading " + self.title + " -- " + mp3URL
-                print "\tTrackname " + trackname
-                print "\tSavename " + savename
-                print "\tMime-type " + grabber.info["content-type"]
+            logger.info("\tDownloading %s -- %s" % (self.title, mp3URL))
+            logger.info("\tTrackname " + trackname)
+            logger.info("\tSavename " + savename)
+            logger.info("\tMime-type " + grabber.info["content-type"])
 
             if self.options["tellnew"]:
                 self.message = self.message + savename + " (" + self.title + ")\n"
@@ -610,7 +635,7 @@ class podcastThreaded( Thread ):
                 try:
                     grabber.get()
                 except IOError, e:
-                    sys.stderr.write( str( e ) )
+                    logger.info("Unable to download enclosure " + mp3URL)
                     self.makefeedlogentry( None )
                     break
 
@@ -678,6 +703,7 @@ class podcastListXML:
 
             # skip anything that isn't http - probably lazy, but hey!
             if not re.compile( "^http", re.I ).search( feed["url"] ):
+                logger.info("Skipping feed - not http: " + feed["url"])
                 continue
 
             # set the config options for this feed.  We use the defaults then
@@ -685,11 +711,11 @@ class podcastListXML:
             options = copy.deepcopy( self.config.defaults )
             if feed.has_key( "options" ):
                 for k, v in feed["options"].items():
+                    logger.debug("Setting feed-specific option: %s = %s" % (k, v))
                     options[k] = v
 
             # fetch the feed using a thread
-            if self.config.defaults["verbose"]:
-                print "...Spawning thread %s for feed url %s" % ( threadcount, feed["url"] )
+            logger.info("...Spawning thread %s for feed url %s" % ( threadcount, feed["url"] ))
             feed_thread = podcastThreaded( feed["url"], feed["title"], options, self.feedLogDict, self.guidlist, self.filelist )
             self.tlist.append( feed_thread )
             feed_thread.start()
@@ -698,23 +724,25 @@ class podcastListXML:
         for t in self.tlist:
             t.join()
             if t.message:
-                if self.options["verbose"] or self.options["tellnew"]:
+                if self.options["tellnew"]:
                     print "Downloaded\n%s" % ( t.message )
-                    if self.options["verbose"]:
-                        print "Logged : %s" % ( t.log )
+                logger.info("Downloaded\n%s" % ( t.message ))
+                logger.info("Logged : %s" % ( t.log ))
             if t.log:
                 logfile = open( os.path.expanduser( "~/.peapod/download.log" ), "a" )
                 if not self.config.defaults["dryrun"]:
+                    logger.debug("Appending to " + logfile.name)
                     logfile.write( t.log )
                 else:
-                    print "Would have logged : %s" % t.log
+                    logger.info("Would have logged : %s" % t.log)
                 logfile.close()
             if t.feedlog:
                 feedlog = open( os.path.expanduser( "~/.peapod/feed.log" ), "a" )
                 if not self.config.defaults["dryrun"]:
+                    logger.debug("Appending to " + feedlog.name)
                     feedlog.write( t.feedlog )
                 else:
-                    print "Would have logged : %s" % t.feedlog
+                    logger.info("Would have logged : %s" % t.feedlog)
                 feedlog.close()
 
 
@@ -741,6 +769,7 @@ class peapodConf:
     defaults = {
                 "savedir": "/tmp/podcasts",
                 "verbose": 0,
+                "log_level": logging.WARN,
                 "tellnew": 0,
                 "homedir": "~/.peapod",
                 "savestyle": "feed",
@@ -805,13 +834,15 @@ class peapodConf:
     def __init__( self ):
         if not self.parsed:
             if not os.path.isfile( os.path.expanduser( '~/.peapod/peapod.xml' ) ):
+                logger.debug("No configuration file found")
                 self.create_default_config()
-                print "\nCreated a default configuration file in :\n"
-                print "\t %s\n" % os.path.expanduser( "~/.peapod/peapod.xml" )
-                print "\nPlease edit this file to contain your feeds and options.\n"
+                logger.warn("Created a default configuration file in :")
+                logger.warn(os.path.expanduser( "~/.peapod/peapod.xml" ))
+                logger.warn("Please edit this file to contain your feeds and options.")
                 sys.exit( -1 )
             else:
                 data = open( os.path.expanduser( "~/.peapod/peapod.xml" ) )
+                logger.debug("Parsing configuration file")
                 config = xml.dom.minidom.parseString( data.read() )
                 options = {}
                 if config.getElementsByTagName( "options" ):
@@ -841,15 +872,16 @@ class peapodConf:
         self.config = config
 
 
-    def parse_commandline( self):
+    def parse_commandline( self ):
         """
         Check for commandline arguments.  Uses getopt for argument processing
         long and short style options.
         """
+        logger.debug("Parsing command line arguments")
         try:
-            opts, args = getopt.getopt( sys.argv[1:], "hbcdvpm:ag:f", ["help", "savestyle=", "post=", "copynew","synciPod", "playlist", "dryrun", "catchup", "mp3path=", "ipodpath=","addnew=", "getall=", "bandwidth=", "forgetnew", "verbose", "getallglobal", "export", "title="] )
+            opts, args = getopt.getopt( sys.argv[1:], "hDbcdvpm:ag:f", ["help", "debug", "savestyle=", "post=", "copynew","synciPod", "playlist", "dryrun", "catchup", "mp3path=", "ipodpath=","addnew=", "getall=", "bandwidth=", "forgetnew", "verbose", "getallglobal", "export", "title="] )
         except getopt.GetoptError,e:
-            print "options error",e
+            logger.critical("Error parsing commandline")
             peapod_usage()
             sys.exit( -2 )
         for opt, arg in opts:
@@ -868,6 +900,8 @@ class peapodConf:
                 self.defaults["catchup"] = 1
             elif opt in ( "-v", "--verbose" ):
                 self.defaults["verbose"] = 1
+            elif opt in ( "-D", "--debug" ):
+                self.defaults["log_level"] = logging.DEBUG
             elif opt in ( "-p", "--playlist" ):
                 self.defaults["playlist"] = 1
             elif opt in ( "-m", "--mp3path" ):
@@ -892,7 +926,7 @@ class peapodConf:
                 try:
                     exportfeeds( self.feedlist )
                 except Exception,e:
-                    print "Export Failed:",e
+                    logger.critical("Export Failed")
                     sys.exit(-3)
                 else:
                     sys.exit(0)
@@ -918,10 +952,11 @@ class peapodConf:
 """
         try:
             fd = open( os.path.expanduser( "~/.peapod/peapod.xml" ), "w" )
+            logger.debug("Writing to file" + fd.name)
             fd.write( config )
             fd.close()
         except:
-            print "Could not create default config file!"
+            logger.critical("Could not create default config file!")
             sys.exit( -1 )
 
 
@@ -943,10 +978,12 @@ class newTracks:
         # check to see if we've run a copynew before - grab the time if we have
         if os.path.exists( os.path.expanduser( "~/.peapod/%s" % logfile ) ):
             lc = open( os.path.expanduser( "~/.peapod/%s" % logfile ), "r" )
+            logger.debug("Reading from " + lc.name)
             self.lasttime = lc.readline()
             lc.close()
         else:
             self.lasttime = 0
+        logger.debug("Last update of %s: %s" % (lc.name, str(self.lasttime)))
 
 
     def copyNew( self, path ):
@@ -956,6 +993,7 @@ class newTracks:
         """
         if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
             log = open( os.path.expanduser( "~/.peapod/download.log" ), "r" )
+            logger.debug("Reading from " + log.name)
             while 1:
                 line = log.readline()
                 if not line:
@@ -964,11 +1002,10 @@ class newTracks:
                     filename = line.split( "||" )[0]
                     dtime = line.split( "||" )[2]
                 except:
-                    sys.stderr.write( "Error in download log : %s\n" % line )
+                    logger.warn( "Error in download log : %s\n" % line )
                     continue
                 if int( dtime ) > int( self.lasttime ):
-                    if self.config["verbose"]:
-                        print "Copying " + filename + " to " + path
+                    logger.info("Copying " + filename + " to " + path)
                     shutil.copyfile( filename, "%s/%s" % ( path, os.path.basename( filename ) ) )
             log.close()
         self.updateLog()
@@ -997,17 +1034,16 @@ class newTracks:
                         filename = line.split( "||" )[0]
                         dtime = line.split( "||" )[2]
                     except:
-                        sys.stderr.write( "Error in download log : %s\n" % line )
+                        logger.warn("Error in download log : %s\n" % line )
                         continue
                     if int( dtime ) > int( self.lasttime ):
-                        if self.config["verbose"]:
-                            print "Copying " + filename + " to " + mountPoint
+                        logger.info("Copying %s to %s" % (filename, mountPoint))
                         self.copyToiPod(itdb, filename )
                 log.close()
                 self.updateLog()
         finally:
             gpod.itdb_write(itdb, None)
-            print "Updating iTunesDB..."
+            logger.info("Updating iTunesDB...")
 
 
     def copyToiPod(self,itdb,filename):
@@ -1044,6 +1080,7 @@ class newTracks:
         """
         if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
             log = open( os.path.expanduser( "~/.peapod/download.log" ), "r" )
+            logger.debug("Reading from " + log.name)
             while 1:
                 line = log.readline()
                 if not line:
@@ -1052,9 +1089,10 @@ class newTracks:
                     filename = line.split( "||" )[0]
                     dtime = line.split( "||" )[2]
                 except:
-                    sys.stderr.write( "Error in download log : %s\n" % line )
+                    logger.warn( "Error in download log : %s\n" % line )
                     continue
                 if int( dtime ) > int( self.lasttime ):
+                    # Should this be handled by logging engine?
                     print filename
             log.close()
         self.updateLog()
@@ -1065,6 +1103,7 @@ class newTracks:
         all downloaded files as old.
         """
         lc = open( os.path.expanduser( "~/.peapod/%s" % self.logfile ), "w" )
+        logger.debug("Updating logfile: " + lc.name)
         lc.write( "%s" % int( time.time() ) )
         lc.close()
 
@@ -1085,6 +1124,8 @@ def peapod_usage():
     """
     print "PeaPod - Usage"
     print "--help | -h\t\t\tThis message"
+    print "--debug | -D\t\t\tWrites debugging messages to ~/.peapod/log"
+    print "--verbose | -v\t\t\tWrites progress information to console"
     print "--copynew | -c\t\t\tCopy recent downloads to your mp3 player"
     print "--synciPod \t\t\tSynchronize the podcast library with your iPod"
     print "--savestyle=style \t\t'feed' saves into directories named after the feed"
@@ -1113,6 +1154,7 @@ def feedLog():
     entryDict = {}
     if os.path.exists( os.path.expanduser( "~/.peapod/feed.log" ) ):
         log = open( os.path.expanduser( "~/.peapod/feed.log" ), "r" )
+        logger.debug("Reading logfile: " + log.name)
         for line in log.readlines():
             entryDict = {}
             parts = line.split( "||" )
@@ -1137,6 +1179,7 @@ def downloadListFull():
     filenames = []
     if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
         log = open( os.path.expanduser( "~/.peapod/download.log" ) )
+        logger.debug("Reading logfile: " + log.name)
         while 1:
             line = log.readline()
             if not line:
@@ -1153,8 +1196,10 @@ def upgradeDownloadLog( logfile ):
     """
     if not os.path.exists( logfile ):
         return
+    logger.debug("Upgrading download log to new version")
     downloadDict = {}
     log = open( logfile )
+    logger.debug("Reading logfile: " + log.name)
     while 1:
         line = log.readline()
         if not line:
@@ -1164,15 +1209,17 @@ def upgradeDownloadLog( logfile ):
         #double-check that we haven't already upgraded this log
         #this shoudn't happen but I'm feeling cautious today
         if string.find( line, "||" ) != -1:
+            logger.debug("Detected current version of download log")
             return
         else:
             #we are actually going to upgrade the log so take a copy for safe-keeping
+            logger.debug("Saving copy of download log to " + os.path.expanduser( "~/.peapod/download.log" ) + ".peapodsav" )
             shutil.copyfile( logfile, os.path.expanduser( "~/.peapod/download.log" ) + ".peapodsav" )
 
         #if we have podcast names containing ',' we have to be clever to
         #piece the filename back together
         if len( parts ) != 2:
-            print "Broken entry in %s: attempting to fix it" % logfile
+            logger.info("Broken entry in %s: attempting to fix it" % logfile)
             filename=string.join( parts[:-1], ',' )
             downloaddate=parts[-1]
         else:
@@ -1183,12 +1230,13 @@ def upgradeDownloadLog( logfile ):
 
     #now we've got all the data it's time to write out the new log
     log = open( logfile, 'w' )
+    logger.debug("Rewriting log file: " + log.name)
     for key in downloadDict.keys():
         item = downloadDict[key]
         content = item[0] + "||" + item[1] + "||" + item[2]
         log.write( content )
     log.close()
-
+    logger.debug("Upgrade completed")
 
 def downloadList():
     """
@@ -1203,6 +1251,7 @@ def downloadList():
     logdict = {}
     if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
         log = open( os.path.expanduser( "~/.peapod/download.log" ) )
+        logger.debug("Reading logfile: " + log.name)
         while 1:
             line = log.readline()
             if not line:

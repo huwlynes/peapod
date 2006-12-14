@@ -1,14 +1,21 @@
 #!/usr/bin/python
 
+import sys
+import string
+import logging
+from time import strftime,localtime
+
+# get root logger
+logger = logging.getLogger()
+
 try:
     import eyeD3
     eyed3 = True
+    logger.debug("Has eyeD3")
 except:
     eyed3 = False
+    logger.debug("Does not have eyeD3")
 
-import sys
-import string
-from time import strftime,localtime
 if not sys.platform.startswith("win"):
     from popen2 import Popen3
 
@@ -32,10 +39,12 @@ class id3Comment:
         configured in the constructor.  Returns a dict.
         """
         if eyeD3.isMp3File(str(self.filename)):
+            logger.debug("File is an mp3")
             self.tagobject = eyeD3.Tag()
             self.tagobject.link(str(self.filename))
             self.tagobject.setVersion(eyeD3.ID3_V2_3)
         else:
+            logger.debug("File is not an mp3")
             raise IOError, "can't ID3 tag %s" % self.filename
         tagdict = {}
         for tag in self.taglist:
@@ -43,6 +52,7 @@ class id3Comment:
             try:
                 exec(cmd)
                 tagdict[tag] = content
+                logger.debug("Found tag: %s = %s" % (tag, content))
             except:
                 print "id3 comments read",e
         return tagdict
@@ -56,12 +66,14 @@ class id3Comment:
             cmd = "self.tagobject.set%s(%s)" % (str(tag),'tagdict["%s"]' % unicode(tag))
             try:
                 exec(cmd)
+                logger.debug("Writing tag: %s = %s" % (tag, tagdict[tag]))
             except Exception,e:
                 print "id3 comments set",e
                 pass
         self.tagobject.setTextEncoding(eyeD3.UTF_16_ENCODING)
         try:
             self.tagobject.update(eyeD3.ID3_V2_3)
+            logger.debug("Committing tags")
         except Exception,e:
             print "id3 write",e
 
@@ -97,7 +109,9 @@ class vorbisComment:
         """
         cmd = "-w %s " % self.filename
         for item in tagdict.keys():
+            logger.debug("Writing tag: %s = %s" % (item, tagdict[item]))
             cmd = cmd + '-t "%s=%s" ' % (string.capitalize(item),tagdict[item])
+        logger.debug("Committing tags")
         self.callVorbisComment(cmd)
 
 
@@ -110,6 +124,7 @@ class vorbisComment:
         tagdict = {}
         for line in output:
             tag,content = string.split(line,'=')
+            logger.debug("Found tag: %s = %s" % (tag, content))
             if not tag == "":
                 tagdict[string.capitalize(tag)] = string.strip(content)
         if tagdict == {}:
@@ -143,7 +158,7 @@ class Comment:
                 else:
                     raise IOError
             except Exception, e:
-                print "ogg",e
+                logger.warn("Error initialising vorbis comments")
                 raise IOError,"can't read tags: %s" % self.filename
 
 
@@ -158,7 +173,7 @@ class Comment:
                 dict = self.comment.read()
                 return dict
             except Exception,e:
-                print "id3-read",e
+                logger.warn("Error reading ID3 tags")
                 pass
 
         if self.fileformat == "vorbis" and self.vorbis:
@@ -167,7 +182,7 @@ class Comment:
                 dict = self.comment.read()
                 return dict
             except Exception,e:
-                print "vorbis-read",e
+                logger.warn("Error reading vorbis tags")
                 pass
 
         return dict
@@ -192,8 +207,10 @@ def editTags(feed,entry,options,filename,taglist=["Artist","Title","Genre","Albu
     try:
         vorbisComment("stuff")
         vorbis = True
+        logger.debug("Has vorbis")
     except:
         vorbis = False
+        logger.debug("Does not have vorbis")
     try:
         comment = Comment(filename,eyed3,vorbis)
     except IOError:
