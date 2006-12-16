@@ -48,6 +48,7 @@ if configp.defaults["bittorrent"]:
 else:
     logger.debug("Disabling bittorrent support")
 
+
 # check to see if our save directory exists - create it if missing
 if not os.path.exists( configp.defaults["savedir"] ):
     savedir = configp.defaults["savedir"]
