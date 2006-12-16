@@ -1,6 +1,6 @@
 README
 btclient.py
-peapod
+peapod.py
 setup.py
 Peapod/OPML.py
 Peapod/__init__.py
