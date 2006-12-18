@@ -108,9 +108,11 @@ if configp.defaults["playlist"]:
 if configp.defaults["forgetnew"]:
     logger.debug("Action: forget all new podcasts")
     list = newTracks( "lastcopy.log", configp.defaults )
-    list.updateLog()
+    if not configp.defaults["dryrun"]:
+        list.updateLog()
     list = newTracks( "lastplay.log", configp.defaults )
-    list.updateLog()
+    if not configp.defaults["dryrun"]:
+        list.updateLog()
 
 # actually download the feeds (assuming we've not done a copynew or playlist
 if not ( configp.defaults["copynew"] or configp.defaults["playlist"] or configp.defaults["addnew"] or configp.defaults["forgetnew"] ):

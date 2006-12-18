@@ -724,7 +724,7 @@ class podcastListXML:
         for t in self.tlist:
             t.join()
             if t.message:
-                if self.options["tellnew"]:
+                if options["tellnew"]:
                     print "Downloaded\n%s" % ( t.message )
                 logger.info("Downloaded\n%s" % ( t.message ))
                 logger.info("Logged : %s" % ( t.log ))
@@ -1006,9 +1006,11 @@ class newTracks:
                     continue
                 if int( dtime ) > int( self.lasttime ):
                     logger.info("Copying " + filename + " to " + path)
-                    shutil.copyfile( filename, "%s/%s" % ( path, os.path.basename( filename ) ) )
+                    if not self.config["dryrun"]:
+                        shutil.copyfile( filename, "%s/%s" % ( path, os.path.basename( filename ) ) )
             log.close()
-        self.updateLog()
+        if not self.config["dryrun"]:
+            self.updateLog()
 
 
     def synciPod( self, mountPoint ):
@@ -1038,12 +1040,15 @@ class newTracks:
                         continue
                     if int( dtime ) > int( self.lasttime ):
                         logger.info("Copying %s to %s" % (filename, mountPoint))
-                        self.copyToiPod(itdb, filename )
+                        if not self.config["dryrun"]:
+                            self.copyToiPod(itdb, filename )
                 log.close()
-                self.updateLog()
+                if not self.config["dryrun"]:
+                    self.updateLog()
         finally:
-            gpod.itdb_write(itdb, None)
-            logger.info("Updating iTunesDB...")
+            if not self.config["dryrun"]:
+                gpod.itdb_write(itdb, None)
+                logger.info("Updating iTunesDB...")
 
 
     def copyToiPod(self,itdb,filename):
@@ -1095,7 +1100,8 @@ class newTracks:
                     # Should this be handled by logging engine?
                     print filename
             log.close()
-        self.updateLog()
+        if not self.config["dryrun"]:
+            self.updateLog()
 
     def updateLog( self ):
         """
