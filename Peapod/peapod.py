@@ -794,7 +794,8 @@ class peapodConf:
                 "export": 0,
                 "addnew": 0,
                 "title": 0,
-                "rewriteID3": 0
+                "rewriteID3": 0,
+		"ID3encoding": "utf-16"
                }
 
 

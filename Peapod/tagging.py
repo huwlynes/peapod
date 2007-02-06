@@ -58,7 +58,7 @@ class id3Comment:
         return tagdict
 
 
-    def write(self,tagdict):
+    def write(self,tagdict,encoding):
         """
         Writes id3 tags to mp3 file.
         """
@@ -70,7 +70,12 @@ class id3Comment:
             except Exception,e:
                 print "id3 comments set",e
                 pass
-        self.tagobject.setTextEncoding(eyeD3.UTF_16_ENCODING)
+	if encoding == "latin1":
+		self.tagobject.setTextEncoding(eyeD3.LATIN1_ENCODING)
+	elif encoding == "utf-8":
+		self.tagobject.setTextEncoding(eyeD3.UTF_8_ENCODING)
+	else:
+		self.tagobject.setTextEncoding(eyeD3.UTF_16_ENCODING)
         try:
             self.tagobject.update(eyeD3.ID3_V2_3)
             logger.debug("Committing tags")
@@ -188,12 +193,15 @@ class Comment:
         return dict
 
 
-    def write(self,dict):
+    def write(self,dict,encoding):
         """
         Write tags to either mp3 or vorbis file.
         """
         try:
-            self.comment.write(dict)
+	    if self.fileformat == "mp3":
+		self.comment.write(dict,encoding)
+	    else:
+		self.comment.write(dict)
         except Exception,e:
             pass
 
@@ -232,5 +240,7 @@ def editTags(feed,entry,options,filename,taglist=["Artist","Title","Genre","Albu
     for tag in taglist:
         if options.has_key(tag):
             tagdict[tag] = str(options[tag])
-    comment.write(tagdict)
-
+    if comment.fileformat == "mp3":
+        comment.write(tagdict,options["ID3encoding"])
+    else:
+        comment.write(tagdict)
