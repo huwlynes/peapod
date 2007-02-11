@@ -1,8 +1,6 @@
 ##things to do befor V1 release
  make --dryrun work for --playlist/--copynew
- --checkall to ignore last-modified/etag in feed.log
  simple safe filename re-writing for feeds like zefrank
- remove silly pubDate de-bugging messages
  add back bittorrent 3.4 support for debian/ubuntu users
  clean up central classes so people can build against them (this will help us when we start on V2)
  separate command line config from file config (allows alternate front-ends to be built)
@@ -11,8 +9,6 @@
  ##V2 wishlist
  consolidate download.log and feed.log into proper XML log
  log all info so we can do clever things later
- use logging module to handle message verbosity properly
-	- Greg is in the process of sorting logging out
  parser for options like %f to feed name %t to trackname
  use parser to allow clever tagging
  use parser to do clever filename re-writing (save original and new name in log)
