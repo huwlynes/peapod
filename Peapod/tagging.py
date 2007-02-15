@@ -193,7 +193,7 @@ class Comment:
         return dict
 
 
-    def write(self,dict,encoding):
+    def write(self,dict,encoding="utf-16"):
         """
         Write tags to either mp3 or vorbis file.
         """
