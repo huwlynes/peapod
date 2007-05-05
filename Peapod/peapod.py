@@ -29,7 +29,6 @@ import os
 import sys
 import time
 import shutil
-import getopt
 import tempfile
 import copy
 import xml.dom.minidom
@@ -90,6 +89,7 @@ class importfeeds:
     Class to import feeds from RSS and OPML sources.
     """
     def __init__( self, feed, peapod, title=None ):
+        self.config = getConfig()
         self.feed = feed
         self.title = title
         self.peapod = peapod
@@ -152,7 +152,7 @@ class importfeeds:
             feed.appendChild( title_node )
             p.appendChild( feed )
         try:
-            fd = open( os.path.expanduser( "~/.peapod/peapod.xml" ), "w" )
+            fd = open( os.path.sep.join( (self.config.options["homedir"], "peapod.xml") ), "w" )
             logger.debug("Writing feedlist to " + fd.name)
             PrettyPrint( p, fd )
             fd.close()
@@ -193,6 +193,8 @@ class downloadURL:
                 #urlgrabber expects unquoted urls
                 self.url = urllib.unquote( f.geturl() )
                 self.info = f.info()
+            except (KeyboardInterrupt, SystemExit):
+		sys.exit(0)
             except Exception, e:
                 raise IOError, "%s : %s" % ( e, url )
 
@@ -209,7 +211,7 @@ class downloadURL:
             logger.debug("Found trackname: " + self.trackname)
 
             # also check for not having an mp3/ogg at all (ie, blah.com/sendfeed.php?id=43)
-            if not re.search( "\.(mp3|ogg|mov|wav|m4v|mp4|m4a|aac|wmv)", self.trackname ):
+            if not re.search( "\.(mp3|ogg|mov|wav|m4v|mp4|m4a|aac|wmv|pdf)", self.trackname ):
                 if self.content_type in self.goodmimes:
                     self.trackname = os.path.split( self.trackname )[1]
                 else:
@@ -253,8 +255,14 @@ class downloadURL:
         """
         if self.torrent:
             amp = re.compile( '(?P<amp>&)' )
+	    whtspc = re.compile( '(?P<whtspc> )' )
+	    safe_basedir = whtspc.sub( r'\\\g<whtspc>', self.basedir )
+	    safe_path = whtspc.sub( r'\\\g<whtspc>', self.path )
             safe_url = amp.sub( r'\\\g<amp>', self.url )
-            self.callbittorrent( safe_url, self.basedir, self.path )
+            self.callbittorrent( safe_url, safe_basedir, safe_path )
+	    logger.debug("Safe URL %s" % safe_url)
+	    logger.debug("Safe basedir %s" % safe_basedir)
+	    logger.debug("Safe path %s" % safe_path)
 
         else:
             try:
@@ -269,6 +277,8 @@ class downloadURL:
                     logger.debug("Creating temporary file: " + self.tmppath)
                     fd = open(self.tmppath,'w')
                     fd.close()
+            except (KeyboardInterrupt, SystemExit):
+		sys.exit()
             except Exception, e:
                 logger.warn("Could not save the track : %s" % self.savename)
                 raise IOError
@@ -282,6 +292,8 @@ class downloadURL:
                 grabber.urlgrab( str( self.url ), filename=str(filename), reget='simple' )
                 logger.debug( self.url )
                 logger.debug( filename )
+	    except (KeyboardInterrupt, SystemExit):
+		sys.exit()
             except Exception, e:
                 e = "%s:%s" % ( self.url, e )
                 logger.warn("%s:%s" % ( self.url, e ))
@@ -473,8 +485,8 @@ class podcastThreaded( Thread ):
             self.title = feed['feed']['title']
 
         # strip out any non-alphanumericals in the title so we can safely(ish) use it as a path-name
-        self.title = re.sub( "\W\W*", "_", self.title )
-        self.options["getall"] = re.sub( "\W\W*", "_", self.options["getall"] )
+        #self.title = re.sub( "\W\W*", "_", self.title )
+        #self.options["getall"] = re.sub( "\W\W*", "_", self.options["getall"] )
 
         logger.info("Fetching podcasts from " + self.title)
 
@@ -486,6 +498,9 @@ class podcastThreaded( Thread ):
             basedir = "%s/%s" % ( self.options["savedir"], self.options["datedir"] )
             tmpdir = self.options["savedir"]
         elif self.options["savestyle"] == "none":
+            basedir = self.options["savedir"]
+            tmpdir = basedir
+        else:
             basedir = self.options["savedir"]
             tmpdir = basedir
 
@@ -543,6 +558,8 @@ class podcastThreaded( Thread ):
                     #read from top to bottom like they would if we were not ordering by time
                     try:
                         grabber = downloadURL( mp3URL, basedir, tmpdir, bittorrent=self.options["bittorrent"], bandwidth=self.bandwidth, path=self.options["path"], content_type=content_type )
+                    except (KeyboardInterrupt, SystemExit):
+                        sys.exit()
                     except Exception:
                         self.makefeedlogentry( None )
                         continue
@@ -590,6 +607,8 @@ class podcastThreaded( Thread ):
             else:
                 try:
                     grabber = downloadURL( mp3URL, basedir, tmpdir, bittorrent=self.options["bittorrent"], bandwidth=self.bandwidth, path=self.options["path"], content_type=content_type )
+		except (KeyboardInterrupt, SystemExit):
+		    sys.exit()
                 except Exception, e:
                     logger.info("Unable to download enclosure: " + mp3URL)
                     self.makefeedlogentry( None )
@@ -653,7 +672,7 @@ class podcastThreaded( Thread ):
                     editTags( feed['feed'],entry, self.options, savename )
 
             #run post command if specified
-            if self.options["post"]:
+            if self.options["post"] and not ( self.options["dryrun"] or self.options["catchup"] ):
                 os.system( self.options["post"] + " " + savename )
 
             # update our track counters
@@ -679,14 +698,13 @@ class podcastListXML:
     filename = ""
     tlist = []
     message = ""
-    config = ""
     max_threads = 1
 
-    def __init__( self, config, feedLogDict, guidlist, filelist ):
-        self.config = config
+    def __init__( self, feedLogDict, guidlist, filelist ):
+        self.config = getConfig()
         self.guidlist = guidlist
         self.filelist = filelist
-        self.max_threads = self.config.defaults["max_threads"]
+        self.max_threads = self.config.options["max_threads"]
         self.feedLogDict = feedLogDict
 
 
@@ -708,7 +726,7 @@ class podcastListXML:
 
             # set the config options for this feed.  We use the defaults then
             # merge in any per-feed settings
-            options = copy.deepcopy( self.config.defaults )
+            options = copy.deepcopy( self.config.options )
             if feed.has_key( "options" ):
                 for k, v in feed["options"].items():
                     logger.debug("Setting feed-specific option: %s = %s" % (k, v))
@@ -729,16 +747,16 @@ class podcastListXML:
                 logger.info("Downloaded\n%s" % ( t.message ))
                 logger.info("Logged : %s" % ( t.log ))
             if t.log:
-                logfile = open( os.path.expanduser( "~/.peapod/download.log" ), "a" )
-                if not self.config.defaults["dryrun"]:
+                logfile = open( os.path.sep.join( (self.config.options["homedir"], "download.log") ), "a" )
+                if not self.config.options["dryrun"]:
                     logger.debug("Appending to " + logfile.name)
                     logfile.write( t.log )
                 else:
                     logger.info("Would have logged : %s" % t.log)
                 logfile.close()
             if t.feedlog:
-                feedlog = open( os.path.expanduser( "~/.peapod/feed.log" ), "a" )
-                if not self.config.defaults["dryrun"]:
+                feedlog = open( os.path.sep.join( (self.config.options["homedir"], "feed.log") ), "a" )
+                if not self.config.options["dryrun"]:
                     logger.debug("Appending to " + feedlog.name)
                     feedlog.write( t.feedlog )
                 else:
@@ -757,23 +775,22 @@ class peapodConf:
 
     Use :
 
-    config = peapodConf()
-    print config.defaults["savepath"]
+    config = getConfig()
+    print config.options["savepath"]
     for feed in config.feedlist:
         print feed[""]
         print feed["url"]
         print feed["options"]["savepath"]
     """
-    parsed = 0
-    feedlist = {}
+    _instance = None
     defaults = {
                 "savedir": "/tmp/podcasts",
                 "verbose": 0,
                 "log_level": logging.WARN,
                 "tellnew": 0,
                 "homedir": "~/.peapod",
+                "configfile": "peapod.xml",
                 "savestyle": "feed",
-                "incoming": "/tmp/peapod",
                 "bittorrent": 1,
                 "bandwidth" : 0,
                 "newfeedsingle": 1,
@@ -794,8 +811,7 @@ class peapodConf:
                 "export": 0,
                 "addnew": 0,
                 "title": 0,
-                "rewriteID3": 0,
-		"ID3encoding": "utf-16"
+                "rewriteID3": 0
                }
 
 
@@ -832,111 +848,88 @@ class peapodConf:
         return opt
 
 
-    def __init__( self ):
-        if not self.parsed:
-            if not os.path.isfile( os.path.expanduser( '~/.peapod/peapod.xml' ) ):
-                logger.debug("No configuration file found")
-                self.create_default_config()
-                logger.warn("Created a default configuration file in :")
-                logger.warn(os.path.expanduser( "~/.peapod/peapod.xml" ))
-                logger.warn("Please edit this file to contain your feeds and options.")
-                sys.exit( -1 )
+    def __init__( self, cmd_line=None ):
+        self.feedlist = {}
+        self.options = copy.deepcopy( self.defaults )
+        if cmd_line:
+            home = cmd_line.pop( "homedir", self.options["homedir"] )
+            self.options["homedir"] = cleanpath( home )
+
+            conf = cmd_line.pop( "configfile", self.options["configfile"] )
+            if not os.path.dirname( conf ):
+                self.options["configfile"] = os.path.sep.join( (self.options["homedir"], conf) )
             else:
-                data = open( os.path.expanduser( "~/.peapod/peapod.xml" ) )
-                logger.debug("Parsing configuration file")
-                config = xml.dom.minidom.parseString( data.read() )
-                options = {}
-                if config.getElementsByTagName( "options" ):
-                    option_elements = config.getElementsByTagName( "options" )
-                    for element in option_elements:
-                        if element.parentNode.nodeName == "peapod":
-                            self.process_options( element, self.defaults )
+                self.options["configfile"] = cleanpath( conf )
+        else:
+            self.options["homedir"] = cleanpath( self.options["homedir"] )
+            self.options["configfile"] = os.path.sep.join( (self.options["homedir"], self.options["configfile"]) )
+            
+        logger.debug('Using homedir:' + self.options["homedir"])
+        logger.debug('Using config file:' + self.options["configfile"])
 
-                feeds = config.getElementsByTagName( "feed" )
-                feedlist = []
-                for feed in feeds:
-                    fop = {}
-                    title = self.get_text( feed.getElementsByTagName( "title" )[0].childNodes )
-                    url = self.get_text( feed.getElementsByTagName( "url" )[0].childNodes )
-                    if feed.getElementsByTagName( "options" ):
-                        option_elements = feed.getElementsByTagName( "options" )
-                        for element in option_elements:
-                            fop = self.process_options( element, fop )
-                    self.feedlist[title] = {'title': title, 'url': url, 'options': fop}
+        # check to see if our user already has a homedir - create it if missing
+        if not os.path.exists( self.options["homedir"] ):
+            logger.warn( "Creating user directory: %s" % self.options["homedir"] )
+            os.mkdir( self.options["homedir"] )
 
-                data.close()
-                self.parse_commandline()
-                #config.unlink()
-                self.parsed = 1
+        self.parse_configfile()
+
+        # merge in command line options to override config file options
+        if cmd_line:
+            for (k, v) in cmd_line.items():
+                self.options[k] = v
+
         #make sure we've expanded out the paths
-        self.defaults["savedir"] = os.path.expanduser( self.defaults["savedir"] )
-        self.config = config
+        self.options["savedir"] = os.path.expanduser( self.options["savedir"] )
 
 
-    def parse_commandline( self ):
+    def parse_configfile( self ):
         """
-        Check for commandline arguments.  Uses getopt for argument processing
-        long and short style options.
+        Read configuration file and use contents to override default options.
         """
-        logger.debug("Parsing command line arguments")
-        try:
-            opts, args = getopt.getopt( sys.argv[1:], "hDbcdvpm:ag:f", ["help", "debug", "savestyle=", "post=", "copynew","synciPod", "playlist", "dryrun", "catchup", "mp3path=", "ipodpath=","addnew=", "getall=", "bandwidth=", "forgetnew", "verbose", "getallglobal", "export", "title="] )
-        except getopt.GetoptError,e:
-            logger.critical("Error parsing commandline")
-            peapod_usage()
-            sys.exit( -2 )
-        for opt, arg in opts:
-            if opt in ( "-h", "--help" ):
-                peapod_usage()
-                sys.exit( -2 )
-            elif opt in ( "--savestyle" ):
-                self.defaults["savestyle"] = arg
-            elif opt in ( "-c", "--copynew" ):
-                self.defaults["copynew"] = 1
-            elif opt in ("--synciPod" ):
-                self.defaults["synciPod"] = 1
-            elif opt in ( "-d", "--dryrun" ):
-                self.defaults["dryrun"] = 1
-            elif opt in ( "--catchup" ):
-                self.defaults["catchup"] = 1
-            elif opt in ( "-v", "--verbose" ):
-                self.defaults["verbose"] = 1
-            elif opt in ( "-D", "--debug" ):
-                self.defaults["log_level"] = logging.DEBUG
-            elif opt in ( "-p", "--playlist" ):
-                self.defaults["playlist"] = 1
-            elif opt in ( "-m", "--mp3path" ):
-                self.defaults["mp3path"] = arg
-            elif opt in ( "--ipodpath" ):
-                self.defaults["ipodpath"] = arg
-            elif opt in ( "-g", "--getall" ):
-                self.defaults["getall"] = arg
-            elif opt in ( "--bandwidth" ):
-                self.defaults["bandwidth"] = int( arg )
-            elif opt in ( "--getallglobal" ):
-                self.defaults["getallglobal"] = 1
-            elif opt in ( "--post" ):
-                self.defaults["post"] = arg
-            elif opt in ( "-a", "--addnew" ):
-                self.defaults["addnew"] = arg
-            elif opt in ( "--title" ):
-                self.defaults["title"] = arg
-            elif opt in ( "-f", "--forgetnew" ):
-                self.defaults["forgetnew"] = 1
-            elif opt in ( "--export" ):
-                try:
-                    exportfeeds( self.feedlist )
-                except Exception,e:
-                    logger.critical("Export Failed")
-                    sys.exit(-3)
-                else:
-                    sys.exit(0)
+        if not os.path.isfile( self.options["configfile"] ):
+            logger.debug("No configuration file found")
+            self.create_default_config()
+            logger.warn("Created a default configuration file in :")
+            logger.warn( self.options["configfile"] )
+            logger.warn("Please edit this file to contain your feeds and options.")
+
+            # It is perfectly okay to not exit at this stage.  Because the
+            # default configuration that is created has not been parsed, no
+            # feeds are stored in memory.  As a result, there is nothing to be
+            # done and the whole program completes naturally.
+
+        else:
+            data = open( self.options["configfile"] )
+            logger.debug("Parsing configuration file" + data.name)
+            config = xml.dom.minidom.parseString( data.read() )
+            options = {}
+            if config.getElementsByTagName( "options" ):
+                option_elements = config.getElementsByTagName( "options" )
+                for element in option_elements:
+                    if element.parentNode.nodeName == "peapod":
+                        self.process_options( element, self.options )
+
+            feeds = config.getElementsByTagName( "feed" )
+            feedlist = []
+            for feed in feeds:
+                fop = {}
+                title = self.get_text( feed.getElementsByTagName( "title" )[0].childNodes )
+                url = self.get_text( feed.getElementsByTagName( "url" )[0].childNodes )
+                if feed.getElementsByTagName( "options" ):
+                    option_elements = feed.getElementsByTagName( "options" )
+                    for element in option_elements:
+                        fop = self.process_options( element, fop )
+                self.feedlist[title] = {'title': title, 'url': url, 'options': fop}
+
+            data.close()
+            self.config = config
 
 
     def create_default_config( self ):
         """
-        Creates a default configuration file in ~/.peapod/peapod.xml, which
-        provides a sample podcast subscription.
+        Creates a default configuration file, usually in ~/.peapod/peapod.xml,
+        which provides a sample podcast subscription.
         """
         config = """<?xml version='1.0' encoding='UTF-8'?>
 <peapod>
@@ -952,13 +945,36 @@ class peapodConf:
 </peapod>
 """
         try:
-            fd = open( os.path.expanduser( "~/.peapod/peapod.xml" ), "w" )
+            fd = open( self.options["configfile"], "w" )
             logger.debug("Writing to file" + fd.name)
             fd.write( config )
             fd.close()
         except:
             logger.critical("Could not create default config file!")
-            sys.exit( -1 )
+            raise Exception
+
+
+def getConfig( cmd_line=None ):
+    """
+    A function to wrap the creation of peapodConf as a singleton class.  Only
+    the first call to getConfig will recognise any command line options passed
+    to it.
+    """
+    if not peapodConf._instance:
+        peapodConf._instance = peapodConf( cmd_line )
+    return peapodConf._instance
+
+
+def purgeConfig( ):
+    """
+    A function to unload the config object.  This shouldn't be necessary during
+    normal functioning, but is very handy for running test suites over the
+    config class.  Note that the object is still only subject to garbage
+    collection, and is not destroyed immediately.
+    """
+    if peapodConf._instance:
+        del peapodConf._instance
+        peapodConf._instance = None
 
 
 class newTracks:
@@ -973,18 +989,18 @@ class newTracks:
     logfile = ""
     config = ""
 
-    def __init__( self, logfile, config ):
+    def __init__( self, logfile ):
         self.logfile = logfile
-        self.config = config
+        self.config = getConfig().options
         # check to see if we've run a copynew before - grab the time if we have
-        if os.path.exists( os.path.expanduser( "~/.peapod/%s" % logfile ) ):
-            lc = open( os.path.expanduser( "~/.peapod/%s" % logfile ), "r" )
+        if os.path.exists( os.path.sep.join( (self.config["homedir"], logfile) )):
+            lc = open( os.path.sep.join( (self.config["homedir"], logfile) ), "r" )
             logger.debug("Reading from " + lc.name)
             self.lasttime = lc.readline()
+            logger.debug("Last update of %s: %s" % (lc.name, str(self.lasttime)))
             lc.close()
         else:
             self.lasttime = 0
-        logger.debug("Last update of %s: %s" % (lc.name, str(self.lasttime)))
 
 
     def copyNew( self, path ):
@@ -992,8 +1008,8 @@ class newTracks:
         Examine the download log for any files which have been downloaded since
         the last run.  Copies files to configured mountpoint for media device.
         """
-        if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
-            log = open( os.path.expanduser( "~/.peapod/download.log" ), "r" )
+        if os.path.exists( os.path.sep.join( (self.config["homedir"], "download.log") )):
+            log = open( os.path.sep.join( (self.config["homedir"], "download.log") ), "r" )
             logger.debug("Reading from " + log.name)
             while 1:
                 line = log.readline()
@@ -1027,8 +1043,8 @@ class newTracks:
         if not itdb:
             raise Exception('Cannot open iTunesDB at mount point: %s' % mountPoint)
         try:
-            if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
-                log = open( os.path.expanduser( "~/.peapod/download.log" ), "r" )
+            if os.path.exists( os.path.sep.join( (self.config["homedir"], "download.log") )):
+                log = open( os.path.sep.join( (self.config["homedir"], "download.log") ), "r" )
                 while 1:
                     line = log.readline()
                     if not line:
@@ -1084,8 +1100,8 @@ class newTracks:
         Examine the download log for any files which have been downloaded since
         the last run.  Print filenames to create a playlist.
         """
-        if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
-            log = open( os.path.expanduser( "~/.peapod/download.log" ), "r" )
+        if os.path.exists( os.path.sep.join( (self.config["homedir"], "download.log") )):
+            log = open( os.path.sep.join( (self.config["homedir"], "download.log") ), "r" )
             logger.debug("Reading from " + log.name)
             while 1:
                 line = log.readline()
@@ -1109,7 +1125,7 @@ class newTracks:
         Update the timestamp for marking new files.  Has the effect of marking
         all downloaded files as old.
         """
-        lc = open( os.path.expanduser( "~/.peapod/%s" % self.logfile ), "w" )
+        lc = open( os.path.sep.join( (self.config["homedir"], self.logfile) ), "w" )
         logger.debug("Updating logfile: " + lc.name)
         lc.write( "%s" % int( time.time() ) )
         lc.close()
@@ -1125,42 +1141,17 @@ def cleanpath( path ):
     return path
 
 
-def peapod_usage():
-    """
-    Display command line usage info to stdout.
-    """
-    print "PeaPod - Usage"
-    print "--help | -h\t\t\tThis message"
-    print "--debug | -D\t\t\tWrites debugging messages to ~/.peapod/log"
-    print "--verbose | -v\t\t\tWrites progress information to console"
-    print "--copynew | -c\t\t\tCopy recent downloads to your mp3 player"
-    print "--synciPod \t\t\tSynchronize the podcast library with your iPod"
-    print "--savestyle=style \t\t'feed' saves into directories named after the feed"
-    print "              \t\t\t'date' saves into YYMMDD directories"
-    print "--playlist | -p\t\t\tPrint out a playlist of recent downloads"
-    print "--mp3path=path | -m path\tPath to your mp3 player"
-    print "--ipodpath=path \t\tMount point of your iPod"
-    print "--addnew=url\t\t\tAdd a new feed to peapod"
-    print '--title="a title"\t\tSelect a title when using --addnew'
-    print "--getall=\"title\"\t\tGrab all of the podcasts for this feed"
-    print "--getallglobal\t\t\tGrab all of the podcasts for all feeds"
-    print "--dryrun | -d\t\t\tRun without downloading for testing purposes only"
-    print "--catchup \t\t\tLog new podcasts but don't download them."
-    print "--forgetnew | -f\t\tForget the last copy & playlist dates and set them to \"now\""
-    print "--post=command \t\t\t'command' is run against the filename of each new podcast"
-    print "--export \t\t\tprints feeds in OPML"
-
-
 def feedLog():
     """
     Parse feed.log and extract information about known feeds, and any
     associated conditional download information (e-tag, modified timestamps).
     Returns information as a dict, indexed by URL.
     """
+    config = getConfig()
     feedLogDict = {}
     entryDict = {}
-    if os.path.exists( os.path.expanduser( "~/.peapod/feed.log" ) ):
-        log = open( os.path.expanduser( "~/.peapod/feed.log" ), "r" )
+    if os.path.exists( os.path.sep.join( (config.options["homedir"], "feed.log") )):
+        log = open( os.path.sep.join( (config.options["homedir"], "feed.log") ), "r" )
         logger.debug("Reading logfile: " + log.name)
         for line in log.readlines():
             entryDict = {}
@@ -1170,7 +1161,7 @@ def feedLog():
             feedLogDict[parts[0]] = entryDict
         log.close()
         #now clear out the file
-        log = open( os.path.expanduser( "~/.peapod/feed.log" ), 'w' )
+        log = open( os.path.sep.join( (config.options["homedir"], "feed.log") ), "w" )
         log.close()
     return feedLogDict
 
@@ -1183,9 +1174,10 @@ def downloadListFull():
     I believe this is no longer used and can be purged.
     """
     #like downloadList but returns full paths not filenames
+    config = getConfig()
     filenames = []
-    if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
-        log = open( os.path.expanduser( "~/.peapod/download.log" ) )
+    if os.path.exists( os.path.sep.join( (config["homedir"], "download.log") )):
+        log = open( os.path.sep.join( (config["homedir"], "download.log") ), "r" )
         logger.debug("Reading logfile: " + log.name)
         while 1:
             line = log.readline()
@@ -1220,8 +1212,8 @@ def upgradeDownloadLog( logfile ):
             return
         else:
             #we are actually going to upgrade the log so take a copy for safe-keeping
-            logger.debug("Saving copy of download log to " + os.path.expanduser( "~/.peapod/download.log" ) + ".peapodsav" )
-            shutil.copyfile( logfile, os.path.expanduser( "~/.peapod/download.log" ) + ".peapodsav" )
+            logger.debug("Saving copy of download log to " + logfile + ".peapodsav" )
+            shutil.copyfile( logfile, logfile + ".peapodsav" )
 
         #if we have podcast names containing ',' we have to be clever to
         #piece the filename back together
@@ -1253,11 +1245,12 @@ def downloadList():
 
     """
     # quicky function to grab the filenames from the download log
+    config = getConfig()
     filenames = []
     guids = []
     logdict = {}
-    if os.path.exists( os.path.expanduser( "~/.peapod/download.log" ) ):
-        log = open( os.path.expanduser( "~/.peapod/download.log" ) )
+    if os.path.exists( os.path.sep.join( (config.options["homedir"], "download.log") )):
+        log = open( os.path.sep.join( (config.options["homedir"], "download.log") ), "r" )
         logger.debug("Reading logfile: " + log.name)
         while 1:
             line = log.readline()
