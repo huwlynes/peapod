@@ -784,7 +784,7 @@ class peapodConf:
     """
     _instance = None
     defaults = {
-                "savedir": "/tmp/podcasts",
+                "savedir": "~/podcasts",
                 "verbose": 0,
                 "log_level": logging.WARN,
                 "tellnew": 0,
@@ -880,7 +880,7 @@ class peapodConf:
                 self.options[k] = v
 
         #make sure we've expanded out the paths
-        self.options["savedir"] = os.path.expanduser( self.options["savedir"] )
+        self.options["savedir"] = cleanpath( self.options["savedir"] )
 
 
     def parse_configfile( self ):
