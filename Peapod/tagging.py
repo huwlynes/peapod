@@ -89,7 +89,9 @@ class vorbisComment:
     """
 
     def __init__(self,filename):
-        self.filename = filename
+	whtspc = re.compile( '(?P<whtspc> )' )
+	safe_filename = whtspc.sub( r'\\\g<whtspc>', filename )          
+        self.filename = safe_filename
         self.callVorbisComment()
 
 
