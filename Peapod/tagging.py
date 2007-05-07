@@ -2,6 +2,7 @@
 
 import sys
 import string
+import re
 import logging
 from time import strftime,localtime
 
@@ -165,7 +166,9 @@ class Comment:
                 else:
                     raise IOError
             except Exception, e:
+		logger.warn(self.filename)
                 logger.warn("Error initialising vorbis comments")
+		logger.warn(e)
                 raise IOError,"can't read tags: %s" % self.filename
 
 
@@ -243,6 +246,9 @@ def editTags(feed,entry,options,filename,taglist=["Artist","Title","Genre","Albu
         if options.has_key(tag):
             tagdict[tag] = str(options[tag])
     if comment.fileformat == "mp3":
-        comment.write(tagdict,options["ID3encoding"])
+	if options["ID3encoding"]:
+            comment.write(tagdict,options["ID3encoding"])
+	else:
+	    comment.write(tagdict)
     else:
         comment.write(tagdict)
