@@ -1000,6 +1000,12 @@ class newTracks:
             self.lasttime = lc.readline()
             logger.debug("Last update of %s: %s" % (lc.name, str(self.lasttime)))
             lc.close()
+            #check that the value in the log is a valis int
+            try:
+                int(self.lasttime)
+            except ValueError:
+                logger.debug("Uknown value in %s setting to 0" % str(logfile))
+                self.lasttime = 0
         else:
             self.lasttime = 0
 
