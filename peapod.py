@@ -219,7 +219,7 @@ if __name__ == "__main__":
             list.updateLog()
 
     # actually download the feeds (assuming we've not done a copynew or playlist
-    if not ( configp.options["copynew"] or configp.options["playlist"] or configp.options["addnew"] or configp.options["forgetnew"] ):
+    if not ( configp.options["copynew"] or configp.options["synciPod"] or configp.options["playlist"] or configp.options["addnew"] or configp.options["forgetnew"] ):
         logger.debug("Action: download new podcasts")
         feedLogDict = feedLog()
         download_dict = downloadList()
