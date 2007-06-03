@@ -1094,6 +1094,8 @@ class newTracks:
                 setattr(track,attrib,value)
         track.skip_when_shuffling=0x01
         track.remember_playback_position=0x01
+        track.mediatype = 0x00000004
+        track.mark_unplayed = 0x02
         #track.flag4=0x01
         track.tracklen = audiofile.getPlayTime() * 1000
         gpod.itdb_track_add(itdb, track, -1)
