@@ -3,7 +3,7 @@
 
 version=0.5
 
-subversion="https://www.peapodpy.org/subversion/peapod/tags/peapod-${version}"
+subversion="https://www.peapodpy.org.uk/subversion/peapod/tags/peapod-${version}"
 
 #grab a changelog
 svn log $subversion > /tmp/CHANGELOG
