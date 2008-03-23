@@ -488,7 +488,7 @@ class podcastThreaded( Thread ):
         #self.title = re.sub( "\W\W*", "_", self.title )
         #self.options["getall"] = re.sub( "\W\W*", "_", self.options["getall"] )
 
-        logger.info("Fetching podcasts from " + self.title)
+        logger.info("Fetching feed for " + self.title)
 
         # set the base directory of the feed to the global "savedir" + the sanitised feed title
         if self.options["savestyle"] == "feed":
