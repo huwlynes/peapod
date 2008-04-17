@@ -5,6 +5,7 @@ setup.py
 Peapod/OPML.py
 Peapod/__init__.py
 Peapod/btclient.py
+Peapod/download.py
 Peapod/feedparser.py
 Peapod/peapod.py
 Peapod/tagging.py

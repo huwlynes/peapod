@@ -9,8 +9,6 @@ This script uses the excellent RSS/Atom feed parser from http://feedparser.org a
 "openanything" module from the equally excellent "Dive into Python" http://diveintopython.org/ .
 """
 
-__version__ = "pre1.0"
-USER_AGENT = 'Peapod/%s +http://www.peapodpy.org' % __version__
 threadcount = 0
 
 
@@ -29,28 +27,19 @@ import os
 import sys
 import time
 import shutil
-import tempfile
 import copy
 import xml.dom.minidom
 from xml.dom import Node
 from threading import Thread
 from Peapod.tagging import editTags
-from urlgrabber.grabber import URLGrabber
-from urlgrabber import urlopen
-from time import strftime,localtime
-import urllib
-import urllib2
-import urlparse
-import logging
-if sys.platform.startswith("win"):
-    bittorrent = False
-else:
-    from popen2 import Popen3
+from Peapod.download import downloadURL
 from Peapod import OPML
-try:
-    from Peapod.btclient import mytorrent
-except:
-    pass
+from urlgrabber import urlopen
+import logging
+
+
+__version__ = "pre1.0"
+USER_AGENT = 'Peapod/%s +http://www.peapodpy.org.uk' % __version__
 
 # get a copy of the root logger
 logger = logging.getLogger()
@@ -59,6 +48,7 @@ logger = logging.getLogger()
 #etag or modified when downloading
 class PeapodError( Exception ):
     def __init__( self, value ):
+        Exception.__init__(self)
         self.value = value
     def __str__( self ):
         return repr( self.value )
@@ -158,160 +148,6 @@ class importfeeds:
             fd.close()
         except Exception,e:
             print e
-
-
-class downloadURL:
-    """
-    A class to download a single enclosure from a feed.  Redirect requests are
-    handled before the download request is made.
-
-    A limited number of filetypes are accepted for download, as defined by a
-    hardcoded list of file extensions.  In the case where a pattern match
-    fails, a subsequent match is tested based on a list of mime-types.
-
-    BitTorrent downloads are handled by an out-of-process application.
-    """
-    blockSize = 4096
-
-    def __init__( self, url, basedir, tmpdir='/tmp',filename=None, bittorrent=True, bandwidth=5000, user_agent=USER_AGENT, path=False, content_type=None ):
-            self.url = url
-            self.basedir = basedir
-            self.filename = filename
-            self.bandwidth = bandwidth
-            self.user_agent = user_agent
-            self.path = path
-            self.content_type = content_type
-            self.goodmimes = [ "audio/x-mpeg","audio/mpeg" ]
-            self.tmpdir = tmpdir
-
-            try:
-                #use urllib2 to handle redirects before we hand the url off to openanything
-                request = urllib2.Request( url, headers={'User-agent':user_agent} )
-                opener = urllib2.build_opener()
-                logger.debug("Opening connection to: " + url)
-                f = opener.open( request )
-                #urlgrabber expects unquoted urls
-                self.url = urllib.unquote( f.geturl() )
-                self.info = f.info()
-            except (KeyboardInterrupt, SystemExit):
-		sys.exit(0)
-            except Exception, e:
-                raise IOError, "%s : %s" % ( e, url )
-
-            if ( not re.search( "\.torrent", self.url ) ) or ( not bittorrent ):
-                self.torrent = False
-            else:
-                self.torrent = True
-
-            if self.content_type == "application/x-bittorrent" and bittorrent:
-                self.torrent = True
-            # get the actual track name
-            # chop off any extraneous guff at the end of the URL (ie, blah.mp3?type=podcast)
-            self.trackname = urlparse.urlparse( self.url )[2]
-            logger.debug("Found trackname: " + self.trackname)
-
-            # also check for not having an mp3/ogg at all (ie, blah.com/sendfeed.php?id=43)
-            if not re.search( "\.(mp3|ogg|mov|wav|m4v|mp4|m4a|aac|wmv|pdf)", self.trackname ):
-                if self.content_type in self.goodmimes:
-                    self.trackname = os.path.split( self.trackname )[1]
-                else:
-                    self.trackname = None
-            else:
-                self.trackname = os.path.split( self.trackname )[1]
-
-            if self.torrent:
-                logger.debug("Using bittorrent to download file")
-                self.track = mytorrent( self.url, self.basedir )
-                self.trackname = self.track.filename
-                if self.track.status:
-                    self.trackname = None
-
-            if self.trackname:
-                self.savename = os.path.join( self.basedir, self.trackname )
-                logger.debug("Saving podcast as " + self.savename)
-
-
-    def callbittorrent( self, url, savedir, path ):
-        """
-        Spawn an external process to fetch an enclosure using BitTorrent.
-        """
-        logger.debug("Opening connection to btclient.py")
-        proc = Popen3( '%s/btclient.py %s %s' % ( path, url, savedir ), True )
-        output = proc.fromchild.readlines()
-        errors = proc.childerr.read()
-        errno = proc.wait()
-        if errno:
-            raise IOError, errors
-        else:
-            return 0
-
-
-    def get( self ):
-        """
-        Fetch the requested enclosure to a temporary path.  If the file already
-        exists in the temporary location, a simple reget should pick up the
-        download where it previously left off.  Once the file has been
-        completely downloaded, it is moved into the proper location.
-        """
-        if self.torrent:
-            amp = re.compile( '(?P<amp>&)' )
-	    whtspc = re.compile( '(?P<whtspc> )' )
-	    safe_basedir = whtspc.sub( r'\\\g<whtspc>', self.basedir )
-	    safe_path = whtspc.sub( r'\\\g<whtspc>', self.path )
-            safe_url = amp.sub( r'\\\g<amp>', self.url )
-            self.callbittorrent( safe_url, safe_basedir, safe_path )
-	    logger.debug("Safe URL %s" % safe_url)
-	    logger.debug("Safe basedir %s" % safe_basedir)
-	    logger.debug("Safe path %s" % safe_path)
-
-        else:
-            try:
-                #save to .peapod dir in basedir
-                #allows us to recommence download after a problem
-                self.tmpdir = os.path.join(self.tmpdir,".peapod")
-                self.tmppath = os.path.join(self.tmpdir,self.trackname)
-                if not os.path.isdir(self.tmpdir):
-                    logger.debug("Creating directory for temporary file: " + self.tmpdir)
-                    os.makedirs(self.tmpdir)
-                if not os.path.isfile(self.tmppath):
-                    logger.debug("Creating temporary file: " + self.tmppath)
-                    fd = open(self.tmppath,'w')
-                    fd.close()
-            except (KeyboardInterrupt, SystemExit):
-		sys.exit()
-            except Exception, e:
-                logger.warn("Could not save the track : %s" % self.savename)
-                raise IOError
-
-
-            # keep reading from the remote file and saving to disk till we'
-            filename = self.tmppath
-            try:
-                logger.debug("Fetching url")
-                grabber = URLGrabber( user_agent=self.user_agent, bandwidth=self.bandwidth )
-                grabber.urlgrab( str( self.url ), filename=str(filename), reget='simple' )
-                logger.debug( self.url )
-                logger.debug( filename )
-	    except (KeyboardInterrupt, SystemExit):
-		sys.exit()
-            except Exception, e:
-                e = "%s:%s" % ( self.url, e )
-                logger.warn("%s:%s" % ( self.url, e ))
-                raise IOError, e
-
-            try:
-                logger.debug("moving file to " + self.savename)
-                shutil.move( self.tmppath, self.savename )
-                #hack to get file permissions back to system defaults
-                #since mkstmp uses paranoid permissions
-                current_umask = os.umask(0)
-                os.umask(current_umask)
-                mode = (0666 & (0666 ^ current_umask))
-                os.chmod(self.savename, mode)
-            except Exception, e:
-                logger.warn("Could not create the file %s" % self.savename)
-                os.remove( self.tmppath )
-                raise IOError
 
 
 class podcastThreaded( Thread ):
@@ -520,7 +356,7 @@ class podcastThreaded( Thread ):
             getall = 1
             logger.info("Fetching all podcasts for %s" % self.title)
         else:
-            getall = 0
+            getall = None
 
         # loop over each entry in the podcast feed (again, all praise feedparser.org!)
         timelist = []
@@ -607,8 +443,8 @@ class podcastThreaded( Thread ):
             else:
                 try:
                     grabber = downloadURL( mp3URL, basedir, tmpdir, bittorrent=self.options["bittorrent"], bandwidth=self.bandwidth, path=self.options["path"], content_type=content_type )
-		except (KeyboardInterrupt, SystemExit):
-		    sys.exit()
+                except (KeyboardInterrupt, SystemExit):
+                    sys.exit()
                 except Exception, e:
                     logger.info("Unable to download enclosure: " + mp3URL)
                     self.makefeedlogentry( None )
@@ -632,7 +468,8 @@ class podcastThreaded( Thread ):
                 #a bad time. don't decrease maxfetch so that a bad pubdate doesn't clog up the feed
                 logger.debug("Already have file.  Skipping download")
                 if not int( time_epoch ) > int( time.mktime( time.localtime() ) ):
-                    self.maxfetch = self.maxfetch -1
+                    if not getall:
+                        self.maxfetch = self.maxfetch -1
                     if self.maxfetch <= 0:
                         break
                     else:
@@ -677,7 +514,8 @@ class podcastThreaded( Thread ):
 
             # update our track counters
             numgrabbed = numgrabbed + 1
-            self.maxfetch = self.maxfetch - 1
+            if not getall:
+                self.maxfetch = self.maxfetch - 1
 
             # if we've hit our limit them bail out
             if self.maxfetch <= 0:
@@ -901,26 +739,24 @@ class peapodConf:
             # done and the whole program completes naturally.
 
         else:
-            data = open( self.options["configfile"] )
+            data = open(self.options["configfile"])
             logger.debug("Parsing configuration file" + data.name)
-            config = xml.dom.minidom.parseString( data.read() )
-            options = {}
-            if config.getElementsByTagName( "options" ):
-                option_elements = config.getElementsByTagName( "options" )
+            config = xml.dom.minidom.parseString(data.read())
+            if config.getElementsByTagName("options"):
+                option_elements = config.getElementsByTagName("options")
                 for element in option_elements:
                     if element.parentNode.nodeName == "peapod":
-                        self.process_options( element, self.options )
+                        self.process_options( element, self.options)
 
-            feeds = config.getElementsByTagName( "feed" )
-            feedlist = []
+            feeds = config.getElementsByTagName("feed")
             for feed in feeds:
                 fop = {}
-                title = self.get_text( feed.getElementsByTagName( "title" )[0].childNodes )
-                url = self.get_text( feed.getElementsByTagName( "url" )[0].childNodes )
-                if feed.getElementsByTagName( "options" ):
-                    option_elements = feed.getElementsByTagName( "options" )
+                title = self.get_text(feed.getElementsByTagName("title")[0].childNodes)
+                url = self.get_text(feed.getElementsByTagName("url")[0].childNodes)
+                if feed.getElementsByTagName("options"):
+                    option_elements = feed.getElementsByTagName("options")
                     for element in option_elements:
-                        fop = self.process_options( element, fop )
+                        fop = self.process_options(element, fop)
                 self.feedlist[title] = {'title': title, 'url': url, 'options': fop}
 
             data.close()
@@ -1045,7 +881,7 @@ class newTracks:
         mountPoint=mountPoint.encode()
         try:
             itdb=gpod.itdb_parse(mountPoint,None)
-        except NameError,e:
+        except NameError:
             raise Exception("iPod support requires libgpod library and its python bindings")
         if not itdb:
             raise Exception('Cannot open iTunesDB at mount point: %s' % mountPoint)
@@ -1104,7 +940,7 @@ class newTracks:
             raise Exception('Unable to copy %s to iPod' % filename)
 
 
-    def playlistNew( self, path ):
+    def playlistNew( self):
         """
         Examine the download log for any files which have been downloaded since
         the last run.  Print filenames to create a playlist.
@@ -1266,7 +1102,6 @@ def downloadList():
             if not line:
                 break
             parts = line.split( "||" )
-            filename = os.path.split( parts[0] )[1]
             guid = parts[1]
             if guid == "None":
                 guid = None
