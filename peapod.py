@@ -5,7 +5,7 @@ peapod is a command-line podcast downloader
 Released under the GPL - see http://www.gnu.org for details.
 """
 from Peapod.peapod import getConfig, newTracks, feedLog
-from Peapod.peapod import importfeeds, exportfeeds, urlparse
+from Peapod.peapod import importfeeds, exportfeeds
 from Peapod.peapod import cleanpath, upgradeDownloadLog
 from Peapod.peapod import downloadList, podcastListXML
 import os
@@ -174,14 +174,14 @@ if __name__ == "__main__":
 
 
     # check to see if our save directory exists - create it if missing
-    if not os.path.exists( CONFIG.options["SAVEDIR"] ):
-        SAVEDIR = CONFIG.options["SAVEDIR"]
+    if not os.path.exists( CONFIG.options["savedir"] ):
+        SAVEDIR = CONFIG.options["savedir"]
         LOGGER.info("Creating directory for podcasts: " + SAVEDIR)
         os.mkdir( SAVEDIR )
 
     #create DATEDIR for savestyle=date
     DATEDIR = strftime( "%Y-%m-%d", localtime() )
-    CONFIG.options["DATEDIR"] = DATEDIR
+    CONFIG.options["datedir"] = DATEDIR
 
     #if necessary upgrade the download.log
     upgradeDownloadLog(os.path.sep.join((CONFIG.options["homedir"],

@@ -4,7 +4,7 @@ this module contains the code that actually does the downloading
 
 author: huw lynes huw@hlynes.com
 
-GPLV2
+Released under the GPL - see http://www.gnu.org for details.
 """
 import re
 import shutil
