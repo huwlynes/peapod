@@ -89,7 +89,7 @@ class OutlineList:
     def roots(self):
         return self._roots
 
-class OPMLHandler(saxutils.DefaultHandler):
+class OPMLHandler(xml.sax.ContentHandler):
     def __init__(self):
         self._outlines = OutlineList()
         self._opml = None
