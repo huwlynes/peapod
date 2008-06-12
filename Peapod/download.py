@@ -82,7 +82,7 @@ class downloadURL:
         logger.debug("Found trackname: " + self.trackname)
 
         # also check for not having an mp3/ogg at all (ie, blah.com/sendfeed.php?id=43)
-        if not re.search( "\.(mp3|ogg|mov|wav|m4v|mp4|m4a|aac|wmv|pdf)", self.trackname ):
+        if not re.search( "\.(mp3|ogg|mov|wav|m4v|mp4|m4a|aac|wmv|pdf|avi)", self.trackname ):
             if self.content_type in self.goodmimes:
                 self.trackname = os.path.split( self.trackname )[1]
             else:
