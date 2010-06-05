@@ -29,6 +29,7 @@ import time
 import shutil
 import copy
 import xml.dom.minidom
+from subprocess import Popen, PIPE
 from xml.dom import Node
 from threading import Thread
 from Peapod.tagging import editTags
@@ -510,7 +511,14 @@ class podcastThreaded( Thread ):
 
             #run post command if specified
             if self.options["post"] and not ( self.options["dryrun"] or self.options["catchup"] ):
-                os.system( self.options["post"] + " " + savename )
+                cmd = "%s %s" % (self.options["post"], savename)
+                proc = Popen(cmd, shell=True, stderr=PIPE)
+		posterrs = proc.stderr.read()
+		errno = proc.wait()
+		if errno:
+                    logger.warn("Post script failed:%s:%s" % (cmd,posterrs))
+                else:
+                    logger.debug("Post script ran:%s:%s" % (cmd,posterrs))
 
             # update our track counters
             numgrabbed = numgrabbed + 1

@@ -11,14 +11,13 @@ import shutil
 import os
 import sys
 import urllib2
-from urlgrabber.grabber import URLGrabber
+from Peapod.urlgrabber.grabber import URLGrabber
 import urlparse
 import urllib
 import logging
+from subprocess import Popen, PIPE
 if sys.platform.startswith("win"):
     BITTORRENT = False
-else:
-    from popen2 import Popen3
 try:
     from Peapod.btclient import mytorrent
 except:
@@ -107,8 +106,9 @@ class downloadURL:
         Spawn an external process to fetch an enclosure using BitTorrent.
         """
         logger.debug("Opening connection to btclient.py")
-        proc = Popen3('%s/btclient.py %s %s' % (path, url, savedir), True)
-        errors = proc.childerr.read()
+	cmd = "%s %s %s" % (os.path.join(path,"btclient.py"), url, savedir)
+	proc = Popen(cmd, shell=True, stderr=PIPE)
+        errors = proc.stderr.read()
         errno = proc.wait()
         if errno:
             raise IOError, errors
